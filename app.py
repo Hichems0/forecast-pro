@@ -341,7 +341,7 @@ def render_header():
     """Render professional header"""
     st.markdown("""
         <div class="app-header">
-            <h1>🎯 Plateforme de Prévision Entreprise</h1>
+            <h1>Plateforme de Prévision Entreprise</h1>
             <p>Système de prévision de demande alimenté par IA • Version 2.0.0</p>
         </div>
     """, unsafe_allow_html=True)
@@ -363,7 +363,7 @@ def render_footer():
 
 st.set_page_config(
     page_title="Luna Analytics • Enterprise Forecasting",
-    page_icon="🎯",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -374,23 +374,34 @@ render_header()
 
 # Sidebar info
 with st.sidebar:
-    st.markdown("### 📚 Guide d'utilisation")
+    st.markdown("### Guide d'utilisation")
     st.markdown("""
-    1. **Importer** vos données
-    2. **Sélectionner** les articles
-    3. **Configurer** les paramètres
-    4. **Générer** les prévisions
-    5. **Télécharger** les résultats
+    **Étapes:**
+    1. Importer vos données
+    2. Sélectionner les articles
+    3. Configurer les paramètres
+    4. Générer les prévisions
+    5. Télécharger les résultats
     """)
     st.markdown("---")
-    st.markdown("### ⚙️ Configuration")
-    st.info(f"Points min: **{DATA_MIN}**")
-    st.info(f"Timeout: **900s**")
+    st.markdown("### Configuration système")
+    st.caption(f"Points de données minimum: **{DATA_MIN}**")
+    st.caption(f"Timeout API: **900 secondes**")
 
 # Main content
-st.markdown('<div class="info-box"><strong>Format requis:</strong> CSV (séparateur ;) ou Excel avec les colonnes: <code>Description article</code>, <code>Date de livraison</code>, <code>Quantite</code></div>', unsafe_allow_html=True)
+st.markdown("""
+    <div class="info-box">
+        <strong>Format de données requis</strong><br>
+        Fichier CSV (séparateur ;) ou Excel contenant les colonnes suivantes:
+        <ul style="margin-top: 8px; margin-bottom: 0;">
+            <li><code>Description article</code></li>
+            <li><code>Date de livraison</code></li>
+            <li><code>Quantite</code></li>
+        </ul>
+    </div>
+""", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Choisissez votre fichier", type=["csv", "xlsx"])
+uploaded_file = st.file_uploader("Sélectionner un fichier de données", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
     # Lecture du fichier
@@ -399,9 +410,9 @@ if uploaded_file is not None:
     else:
         df_raw = pd.read_excel(uploaded_file)
 
-    st.success("✅ Fichier chargé avec succès")
+    st.success("Fichier chargé avec succès")
 
-    with st.expander("📋 Aperçu des données brutes"):
+    with st.expander("Aperçu des données brutes", expanded=False):
         st.dataframe(df_raw.head(10), use_container_width=True)
 
     # Préparation du DataFrame journalier
@@ -410,7 +421,8 @@ if uploaded_file is not None:
     # ==========
     # Classement des produits
     # ==========
-    st.subheader("🏆 Classement des produits par quantité mensuelle (cumulée)")
+    st.markdown("---")
+    st.subheader("Classement des produits par quantité mensuelle cumulée")
 
     df_monthly_all = aggregate_quantities(df_daily, freq="M")
     ranking = (
@@ -427,25 +439,26 @@ if uploaded_file is not None:
     # ==========
     # ONGLETS : Article Unique vs Batch vs Validation
     # ==========
+    st.markdown("---")
     tab1, tab2, tab3 = st.tabs([
-        "📦 Prévision Article Unique",
-        "🚀 Prévision Batch (Multiples Articles)",
-        "📊 Validation Historique (Backtesting)"
+        "Prévision Article Unique",
+        "Prévision Batch (Multiples Articles)",
+        "Validation Historique (Backtesting)"
     ])
 
     # ========================================
     # TAB 1 : ARTICLE UNIQUE
     # ========================================
     with tab1:
-        st.subheader("🔍 Visualisation détaillée par article")
+        st.subheader("Analyse détaillée par article")
 
         articles_sorted = ranking["Description article"].tolist()
 
         # Recherche
         search_text = st.text_input(
-            "🔎 Rechercher un article :",
+            "Rechercher un article",
             value="",
-            placeholder="Ex : VIVA, LINDT, PATES...",
+            placeholder="Tapez pour rechercher (ex: VIVA, LINDT, PATES...)",
             key="search_single"
         )
 
@@ -458,9 +471,9 @@ if uploaded_file is not None:
             st.warning("Aucun article ne correspond à votre recherche.")
             st.stop()
 
-        selected_article = st.selectbox("📦 Article :", filtered_articles, key="select_single")
+        selected_article = st.selectbox("Sélectionner un article", filtered_articles, key="select_single")
 
-        freq_label = st.radio("📅 Fréquence d'agrégation :", ("Jour", "Semaine (Ne pas utiliser)"), horizontal=True, key="freq_single")
+        freq_label = st.radio("Fréquence d'agrégation", ("Jour", "Semaine (Ne pas utiliser)"), horizontal=True, key="freq_single")
 
         if freq_label == "Jour":
             freq = "D"
@@ -484,11 +497,12 @@ if uploaded_file is not None:
             min_date = df_article["Période"].min().date()
             max_date = df_article["Période"].max().date()
 
+            st.markdown("#### Période d'analyse")
             col_start, col_end = st.columns(2)
             with col_start:
-                start_date = st.date_input("📅 Date de début de l'historique", value=min_date, min_value=min_date, max_value=max_date, key="start_single")
+                start_date = st.date_input("Date de début", value=min_date, min_value=min_date, max_value=max_date, key="start_single")
             with col_end:
-                end_date = st.date_input("📅 Date de fin de l'historique", value=max_date, min_value=start_date, max_value=max_date, key="end_single")
+                end_date = st.date_input("Date de fin", value=max_date, min_value=start_date, max_value=max_date, key="end_single")
 
             mask_window = (
                 (df_article["Période"] >= pd.to_datetime(start_date)) &
@@ -500,16 +514,20 @@ if uploaded_file is not None:
                 st.warning("La fenêtre de dates choisie ne contient aucune donnée.")
                 st.stop()
         else:
-            st.warning(f"⚠️ Pas assez de données pour cet article (minimum {DATA_MIN} points requis).")
+            st.warning(f"Données insuffisantes pour cet article (minimum {DATA_MIN} points requis).")
             st.stop()
 
-        st.write(f"📦 Article sélectionné : **{selected_article}**")
-        st.write(f"📊 Points de données : {len(df_article)}")
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.metric("Article sélectionné", selected_article)
+        with col_info2:
+            st.metric("Points de données", len(df_article))
 
         st.dataframe(df_article, use_container_width=True)
 
         # Graphique historique
-        st.subheader("📈 Historique des quantités")
+        st.markdown("---")
+        st.subheader("Historique des quantités")
 
         series_hist = df_article.set_index("Période")["Quantité_totale"]
 
@@ -540,7 +558,7 @@ if uploaded_file is not None:
         hist_buffer = create_forecast_excel_with_sum(hist_df, selected_article)
 
         st.download_button(
-            label="📥 Télécharger l'historique (Excel avec TOTAL)",
+            label="Télécharger l'historique (Excel)",
             data=hist_buffer,
             file_name=f"historique_{selected_article}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -548,16 +566,18 @@ if uploaded_file is not None:
         )
 
         # Prévision IA
-        st.subheader("🤖 Prévision IA (via API Modal)")
+        st.markdown("---")
+        st.subheader("Prévision par intelligence artificielle")
 
         # Sélection période de forecast avec jours ouvrés français
         min_date_forecast = df_article["Période"].min().date()
         max_date_forecast = df_article["Période"].max().date()
 
+        st.markdown("#### Période de prévision")
         col_forecast_start, col_forecast_end = st.columns(2)
         with col_forecast_start:
             forecast_start_date = st.date_input(
-                "📅 Date de début du forecast",
+                "Date de début",
                 value=max_date_forecast,
                 min_value=min_date_forecast,
                 max_value=max_date_forecast,
@@ -565,7 +585,7 @@ if uploaded_file is not None:
             )
         with col_forecast_end:
             forecast_end_date = st.date_input(
-                "📅 Date de fin du forecast",
+                "Date de fin",
                 value=max_date_forecast,
                 min_value=max_date_forecast,
                 max_value=max_date_forecast + relativedelta(years=1),
@@ -577,15 +597,15 @@ if uploaded_file is not None:
         forecast_horizon = len(list_dates_business_day)
 
         if forecast_horizon > 0:
-            st.info(f"📊 Horizon calculé : **{forecast_horizon} jours ouvrés** français (hors dimanches et jours fériés)")
+            st.info(f"Horizon calculé: **{forecast_horizon} jours ouvrés** français (hors dimanches et jours fériés)")
         else:
-            st.warning("⚠️ Aucun jour ouvré dans la période sélectionnée.")
+            st.warning("Aucun jour ouvré dans la période sélectionnée.")
             forecast_horizon = None
 
-        run_forecast = st.button("🚀 Lancer la prévision IA", key="run_single")
+        run_forecast = st.button("Lancer la prévision", key="run_single", type="primary")
 
         if forecast_horizon is not None and run_forecast:
-            with st.spinner("⏳ Appel de l'API Modal en cours..."):
+            with st.spinner("Génération de la prévision en cours..."):
                 result = call_modal_api(
                     series_data=series_hist.values,
                     horizon=forecast_horizon,
@@ -611,10 +631,10 @@ if uploaded_file is not None:
             future_index = stored.get('future_index', [])  # Utiliser les jours ouvrés stockés
 
             if result and result.get("success"):
-                st.success(f"✅ Prévision réussie avec le modèle : **{result['model_used']}**")
+                st.success(f"Prévision réussie avec le modèle: **{result['model_used']}**")
 
                 # Affichage diagnostics
-                st.caption("📊 Diagnostics du routage intelligent :")
+                st.caption("Diagnostics du modèle:")
                 routing_info = result.get("routing_info", {})
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -632,7 +652,7 @@ if uploaded_file is not None:
                 median_predictions = result.get("median_predictions")
 
                 # Graphique historique + prévisions
-                st.subheader("📊 Historique et prévisions")
+                st.subheader("Résultats de la prévision")
 
                 fig_pred = go.Figure()
 
@@ -742,26 +762,27 @@ if uploaded_file is not None:
                 forecast_buffer = create_forecast_excel_with_sum(forecast_df, selected_article)
 
                 st.download_button(
-                    label="📥 Télécharger les prévisions (Excel avec TOTAL)",
+                    label="Télécharger les prévisions (Excel)",
                     data=forecast_buffer,
                     file_name=f"previsions_{selected_article}_H{forecast_horizon}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="download_forecast_single"
+                    key="download_forecast_single",
+                    type="primary"
                 )
 
             elif result:
-                st.error(f"❌ Erreur lors de la prévision : {result.get('error', 'Erreur inconnue')}")
+                st.error(f"Erreur lors de la prévision: {result.get('error', 'Erreur inconnue')}")
 
     # ========================================
     # TAB 2 : BATCH FORECAST
     # ========================================
     with tab2:
-        st.subheader("🚀 Prévision Batch - Multiples Articles")
-        st.markdown("Lancez des prévisions sur plusieurs articles en une seule fois et téléchargez tous les résultats.")
+        st.subheader("Prévision Batch - Multiples Articles")
+        st.markdown("Générez des prévisions pour plusieurs articles simultanément et téléchargez l'ensemble des résultats.")
 
         # Sélection des articles
         batch_search = st.text_input(
-            "🔎 Filtrer les articles :",
+            "Filtrer les articles",
             value="",
             placeholder="Tapez pour filtrer...",
             key="search_batch"
@@ -774,29 +795,31 @@ if uploaded_file is not None:
             filtered_batch = articles_sorted
 
         selected_articles = st.multiselect(
-            "📦 Sélectionnez les articles (plusieurs possibles) :",
+            "Sélectionner les articles",
             filtered_batch,
             default=[],
-            key="select_batch"
+            key="select_batch",
+            help="Sélectionnez un ou plusieurs articles pour la prévision batch"
         )
 
-        st.write(f"**{len(selected_articles)}** article(s) sélectionné(s)")
+        if len(selected_articles) > 0:
+            st.caption(f"**{len(selected_articles)}** article(s) sélectionné(s)")
 
         # Avertissement pour les gros batchs
         if len(selected_articles) > 10:
-            st.info(
-                f"⏱️ **Gros batch détecté ({len(selected_articles)} articles)**\n\n"
-                "Le traitement peut prendre du temps (~2-5 min/article).\n"
-                "- Temps estimé : ~" + str(len(selected_articles) * 3) + " minutes\n"
-                "- Ne fermez pas cette page pendant le traitement\n"
-                "- Les résultats seront sauvegardés automatiquement"
+            st.warning(
+                f"**Traitement volumineux détecté** ({len(selected_articles)} articles)\n\n"
+                "• Temps estimé: ~" + str(len(selected_articles) * 3) + " minutes\n"
+                "• Ne fermez pas cette page pendant le traitement\n"
+                "• Les résultats seront automatiquement sauvegardés"
             )
 
         # Paramètres batch
-        batch_freq = st.radio("📅 Fréquence :", ("Jour", "Semaine (Ne pas utiliser)"), horizontal=True, key="freq_batch")
+        st.markdown("---")
+        batch_freq = st.radio("Fréquence d'agrégation", ("Jour", "Semaine (Ne pas utiliser)"), horizontal=True, key="freq_batch")
 
         # Sélection de plage de dates pour l'historique
-        st.subheader("📅 Plage de dates pour l'historique")
+        st.markdown("#### Période historique")
 
         # Obtenir min/max dates globales
         if len(selected_articles) > 0:
@@ -812,7 +835,7 @@ if uploaded_file is not None:
         col_batch_start, col_batch_end = st.columns(2)
         with col_batch_start:
             batch_start_date = st.date_input(
-                "📅 Date de début de l'historique",
+                "Date de début",
                 value=global_min_date,
                 min_value=global_min_date,
                 max_value=global_max_date,
@@ -820,7 +843,7 @@ if uploaded_file is not None:
             )
         with col_batch_end:
             batch_end_date = st.date_input(
-                "📅 Date de fin de l'historique",
+                "Date de fin",
                 value=global_max_date,
                 min_value=batch_start_date,
                 max_value=global_max_date,
@@ -828,12 +851,12 @@ if uploaded_file is not None:
             )
 
         # Sélection période de forecast avec jours ouvrés
-        st.subheader("📅 Période de forecast")
+        st.markdown("#### Période de prévision")
 
         col_forecast_batch_start, col_forecast_batch_end = st.columns(2)
         with col_forecast_batch_start:
             forecast_batch_start_date = st.date_input(
-                "📅 Date de début du forecast",
+                "Date de début",
                 value=global_max_date,
                 min_value=global_min_date,
                 max_value=global_max_date,
@@ -841,7 +864,7 @@ if uploaded_file is not None:
             )
         with col_forecast_batch_end:
             forecast_batch_end_date = st.date_input(
-                "📅 Date de fin du forecast",
+                "Date de fin",
                 value=global_max_date,
                 min_value=global_max_date,
                 max_value=global_max_date + relativedelta(years=1),
@@ -853,19 +876,20 @@ if uploaded_file is not None:
         horizon_batch_val = len(list_dates_batch_business_day)
 
         if horizon_batch_val > 0:
-            st.info(f"📊 Horizon calculé : **{horizon_batch_val} jours ouvrés** français (hors dimanches et jours fériés)")
+            st.info(f"Horizon calculé: **{horizon_batch_val} jours ouvrés** français (hors dimanches et jours fériés)")
         else:
-            st.warning("⚠️ Aucun jour ouvré dans la période de forecast sélectionnée.")
+            st.warning("Aucun jour ouvré dans la période sélectionnée.")
 
         if batch_freq == "Jour":
             freq_batch_val = "D"
         else:
             freq_batch_val = "W-MON"
 
-        run_batch = st.button("🚀 Lancer le Batch Forecast", key="run_batch", type="primary")
+        st.markdown("---")
+        run_batch = st.button("Lancer la prévision batch", key="run_batch", type="primary")
 
         if run_batch and len(selected_articles) > 0 and horizon_batch_val > 0:
-            st.info(f"🔄 Traitement de {len(selected_articles)} article(s)...")
+            st.info(f"Traitement de {len(selected_articles)} article(s) en cours...")
 
             # Initialiser stockage des résultats
             st.session_state.batch_results = {}  # Reset
@@ -888,7 +912,7 @@ if uploaded_file is not None:
 
             for idx, article in enumerate(selected_articles):
                 # Mise à jour statut détaillé pour maintenir la connexion
-                status_text.text(f"⏳ [{idx+1}/{len(selected_articles)}] {article}")
+                status_text.text(f"[{idx+1}/{len(selected_articles)}] Traitement: {article}")
                 progress_bar.progress((idx) / len(selected_articles))
 
                 try:
@@ -913,19 +937,19 @@ if uploaded_file is not None:
                     df_art = df_art.loc[mask_batch_window].copy()
 
                     if df_art.empty:
-                        st.warning(f"⚠️ Pas de données pour {article}, ignoré.")
+                        st.warning(f"Pas de données pour {article}, ignoré.")
                         failed_articles.append((article, "Pas de données"))
                         continue
 
                     if df_art.shape[0] < DATA_MIN:
-                        st.warning(f"⚠️ Pas assez de données pour {article} ({df_art.shape[0]} < {DATA_MIN}), ignoré.")
+                        st.warning(f"Données insuffisantes pour {article} ({df_art.shape[0]} < {DATA_MIN}), ignoré.")
                         failed_articles.append((article, f"Insuffisant ({df_art.shape[0]} points)"))
                         continue
 
                     series_data = df_art.set_index("Période")["Quantité_totale"]
 
                     # Mise à jour statut - Appel API
-                    status_text.text(f"⏳ [{idx+1}/{len(selected_articles)}] {article} - Appel API en cours...")
+                    status_text.text(f"[{idx+1}/{len(selected_articles)}] {article} - Appel API...")
 
                     # Appel API avec timeout adapté
                     result = call_modal_api(
@@ -959,15 +983,15 @@ if uploaded_file is not None:
                             forecast_df["Prévision_médiane"] = result["median_predictions"]
 
                         all_forecasts.append(forecast_df)
-                        status_text.text(f"✅ [{idx+1}/{len(selected_articles)}] {article} - Succès")
+                        status_text.text(f"[{idx+1}/{len(selected_articles)}] {article} - Terminé")
 
                     else:
                         error_msg = result.get('error', 'Erreur inconnue') if result else 'Pas de réponse'
-                        st.warning(f"⚠️ Échec pour {article}: {error_msg}")
+                        st.warning(f"Échec pour {article}: {error_msg}")
                         failed_articles.append((article, error_msg))
 
                 except Exception as e:
-                    st.error(f"❌ Erreur lors du traitement de {article}: {str(e)}")
+                    st.error(f"Erreur lors du traitement de {article}: {str(e)}")
                     failed_articles.append((article, str(e)))
                     logger.exception(f"Batch error for {article}")
 
@@ -981,15 +1005,15 @@ if uploaded_file is not None:
             status_text.empty()
 
             if success_count == len(selected_articles):
-                st.success(f"🎉 Batch terminé avec succès ! {success_count}/{len(selected_articles)} articles traités")
+                st.success(f"Traitement terminé avec succès: {success_count}/{len(selected_articles)} articles")
             elif success_count > 0:
-                st.warning(f"⚠️ Batch terminé partiellement : {success_count}/{len(selected_articles)} articles réussis")
+                st.warning(f"Traitement partiel: {success_count}/{len(selected_articles)} articles réussis")
             else:
-                st.error(f"❌ Échec total : aucun article n'a pu être traité")
+                st.error(f"Échec complet: aucun article n'a pu être traité")
 
             # Afficher les articles échoués si présents
             if failed_articles:
-                with st.expander(f"❌ Articles échoués ({len(failed_articles)})"):
+                with st.expander(f"Articles échoués ({len(failed_articles)})", expanded=False):
                     for art, reason in failed_articles:
                         st.text(f"• {art}: {reason}")
 
@@ -1001,7 +1025,8 @@ if uploaded_file is not None:
             future_index_batch = st.session_state.batch_config.get('future_index', [])
 
             if True:  # Always display if we have results
-                st.subheader("📊 Résumé des prévisions")
+                st.markdown("---")
+                st.subheader("Résumé des prévisions")
 
                 summary_data = []
                 for article, res in st.session_state.batch_results.items():
@@ -1016,7 +1041,8 @@ if uploaded_file is not None:
                 st.dataframe(summary_df, use_container_width=True)
 
                 # Visualisation individuelle par article
-                st.subheader("📊 Visualisation par article")
+                st.markdown("---")
+                st.subheader("Visualisation par article")
 
                 selected_viz_article = st.selectbox(
                     "Sélectionnez un article pour voir son graphique :",
@@ -1128,7 +1154,8 @@ if uploaded_file is not None:
                     st.plotly_chart(fig_viz, use_container_width=True)
 
                     # Téléchargement individuel
-                    st.caption(f"📥 Téléchargement pour {selected_viz_article}")
+                    st.markdown("---")
+                    st.caption(f"Téléchargement des résultats pour {selected_viz_article}")
 
                     forecast_df_viz = pd.DataFrame({
                         "Date": future_index_viz,
@@ -1144,7 +1171,7 @@ if uploaded_file is not None:
                     individual_buffer = create_forecast_excel_with_sum(forecast_df_viz, selected_viz_article)
 
                     st.download_button(
-                        label=f"📥 Télécharger prévision de {selected_viz_article}",
+                        label=f"Télécharger: {selected_viz_article}",
                         data=individual_buffer,
                         file_name=f"prevision_{selected_viz_article}_H{horizon_batch_val}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1152,7 +1179,8 @@ if uploaded_file is not None:
                     )
 
                 # Téléchargement groupé
-                st.subheader("📥 Téléchargement groupé de tous les articles")
+                st.markdown("---")
+                st.subheader("Téléchargement groupé")
 
                 combined_df = pd.concat(all_forecasts, ignore_index=True)
 
@@ -1216,7 +1244,7 @@ if uploaded_file is not None:
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 st.download_button(
-                    label=f"📥 Télécharger TOUTES les prévisions ({len(all_forecasts)} articles)",
+                    label=f"Télécharger toutes les prévisions ({len(all_forecasts)} articles)",
                     data=batch_buffer,
                     file_name=f"batch_forecast_{timestamp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1225,27 +1253,28 @@ if uploaded_file is not None:
                 )
 
         elif run_batch and len(selected_articles) == 0:
-            st.warning("⚠️ Veuillez sélectionner au moins un article.")
+            st.warning("Veuillez sélectionner au moins un article.")
         elif run_batch and horizon_batch_val == 0:
-            st.warning("⚠️ Aucun jour ouvré dans la période de forecast. Veuillez sélectionner une période valide.")
+            st.warning("Aucun jour ouvré dans la période sélectionnée. Veuillez choisir une période valide.")
 
     # ========================================
     # TAB 3 : VALIDATION HISTORIQUE (BACKTESTING)
     # ========================================
     with tab3:
-        st.subheader("📊 Validation Historique - Backtesting")
+        st.subheader("Validation Historique (Backtesting)")
         st.markdown(
             "Testez la précision du modèle en comparant ses prédictions avec des données historiques réelles. "
             "Le modèle est entraîné sur une période et prédit sur une autre période dont vous connaissez déjà les résultats."
         )
 
         # Sélection articles multiples
-        st.subheader("🔍 Sélection des articles")
+        st.markdown("---")
+        st.markdown("#### Sélection des articles")
 
         search_text_val = st.text_input(
-            "🔎 Rechercher des articles :",
+            "Rechercher des articles",
             value="",
-            placeholder="Ex : VIVA, LINDT, PATES...",
+            placeholder="Tapez pour rechercher (ex: VIVA, LINDT, PATES...)",
             key="search_validation"
         )
 
@@ -1259,21 +1288,22 @@ if uploaded_file is not None:
             st.stop()
 
         selected_articles_val = st.multiselect(
-            "📦 Sélectionnez un ou plusieurs articles :",
+            "Sélectionner les articles à valider",
             filtered_articles_val,
             default=[],
             key="articles_validation"
         )
 
         if not selected_articles_val:
-            st.info("👆 Sélectionnez au moins un article pour commencer")
+            st.info("Sélectionnez au moins un article pour commencer")
             st.stop()
 
-        st.write(f"**{len(selected_articles_val)}** article(s) sélectionné(s)")
+        st.caption(f"**{len(selected_articles_val)}** article(s) sélectionné(s)")
 
         # Fréquence
+        st.markdown("---")
         freq_label_val = st.radio(
-            "📅 Fréquence d'agrégation :",
+            "Fréquence d'agrégation",
             ("Jour", "Semaine (Ne pas utiliser)"),
             horizontal=True,
             key="freq_validation"
@@ -1294,15 +1324,16 @@ if uploaded_file is not None:
             st.stop()
 
         # Sélection des périodes train/test
-        st.subheader("📅 Définition des périodes")
+        st.markdown("#### Définition des périodes")
 
         min_date_val = df_selected_val["Période"].min().date()
         max_date_val = df_selected_val["Période"].max().date()
 
+        st.caption("**Période d'entraînement**")
         col_train_start, col_train_end = st.columns(2)
         with col_train_start:
             train_start_date = st.date_input(
-                "📅 Début période d'entraînement",
+                "Date de début",
                 value=min_date_val,
                 min_value=min_date_val,
                 max_value=max_date_val,
@@ -1310,17 +1341,18 @@ if uploaded_file is not None:
             )
         with col_train_end:
             train_end_date = st.date_input(
-                "📅 Fin période d'entraînement",
+                "Date de fin",
                 value=min_date_val + (max_date_val - min_date_val) * 0.7,  # 70% pour train
                 min_value=train_start_date,
                 max_value=max_date_val,
                 key="train_end"
             )
 
+        st.caption("**Période de test**")
         col_test_start, col_test_end = st.columns(2)
         with col_test_start:
             test_start_date = st.date_input(
-                "📅 Début période de test",
+                "Date de début",
                 value=train_end_date + pd.Timedelta(days=1),
                 min_value=train_end_date,
                 max_value=max_date_val,
@@ -1328,7 +1360,7 @@ if uploaded_file is not None:
             )
         with col_test_end:
             test_end_date = st.date_input(
-                "📅 Fin période de test",
+                "Date de fin",
                 value=max_date_val,
                 min_value=test_start_date,
                 max_value=max_date_val,
@@ -1336,10 +1368,11 @@ if uploaded_file is not None:
             )
 
         # Bouton validation
-        run_validation = st.button("🚀 Lancer la validation batch", key="run_validation", type="primary")
+        st.markdown("---")
+        run_validation = st.button("Lancer la validation", key="run_validation", type="primary")
 
         if run_validation:
-            st.info(f"🔄 Validation de {len(selected_articles_val)} article(s)...")
+            st.info(f"Validation de {len(selected_articles_val)} article(s) en cours...")
 
             # Initialiser stockage
             st.session_state.validation_results = []
@@ -1357,7 +1390,7 @@ if uploaded_file is not None:
             validation_summary = []
 
             for idx, article in enumerate(selected_articles_val):
-                status_text.text(f"⏳ Validation de {article} ({idx+1}/{len(selected_articles_val)})...")
+                status_text.text(f"[{idx+1}/{len(selected_articles_val)}] Validation: {article}")
 
                 # Préparer données pour cet article
                 df_article_val = df_agg_val[df_agg_val["Description article"] == article].copy()
@@ -1385,7 +1418,7 @@ if uploaded_file is not None:
                 df_test = df_article_val.loc[mask_test].copy()
 
                 if df_train.empty or df_test.empty:
-                    st.warning(f"⚠️ Pas assez de données pour {article}, ignoré.")
+                    st.warning(f"Données insuffisantes pour {article}, ignoré.")
                     continue
 
                 # Préparer séries
@@ -1441,22 +1474,23 @@ if uploaded_file is not None:
                         "Points_Test": len(df_test)
                     })
                 else:
-                    st.warning(f"⚠️ Échec pour {article}")
+                    st.warning(f"Échec pour {article}")
 
                 progress_bar.progress((idx + 1) / len(selected_articles_val))
 
             # Stocker résultats
             st.session_state.validation_results = validation_summary
 
-            status_text.text("✅ Validation terminée !")
-            st.success(f"✅ Validation réussie pour {len(validation_summary)}/{len(selected_articles_val)} article(s)")
+            status_text.text("Validation terminée")
+            st.success(f"Validation réussie pour {len(validation_summary)}/{len(selected_articles_val)} article(s)")
 
         # Afficher résultats depuis session_state
         if 'validation_results' in st.session_state and len(st.session_state.validation_results) > 0:
             validation_summary = st.session_state.validation_results
             validation_df = pd.DataFrame(validation_summary)
 
-            st.subheader("📊 Résultats de la validation")
+            st.markdown("---")
+            st.subheader("Résultats de la validation")
 
             # Afficher métriques globales
             col1, col2, col3 = st.columns(3)
@@ -1474,11 +1508,13 @@ if uploaded_file is not None:
                     st.metric("MAPE Moyenne", "N/A")
 
             # Afficher tableau synthétique
-            st.subheader("📋 Tableau synthétique par article")
+            st.markdown("---")
+            st.subheader("Tableau synthétique")
             st.dataframe(validation_df, use_container_width=True)
 
             # Export Excel
-            st.subheader("📥 Téléchargement")
+            st.markdown("---")
+            st.subheader("Téléchargement")
 
             validation_buffer = io.BytesIO()
             with pd.ExcelWriter(validation_buffer, engine='openpyxl') as writer:
@@ -1497,11 +1533,12 @@ if uploaded_file is not None:
 
             timestamp_val = datetime.now().strftime("%Y%m%d_%H%M%S")
             st.download_button(
-                label=f"📥 Télécharger validation ({len(validation_summary)} articles)",
+                label=f"Télécharger les résultats ({len(validation_summary)} articles)",
                 data=validation_buffer,
                 file_name=f"validation_batch_{timestamp_val}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_validation"
+                key="download_validation",
+                type="primary"
             )
 
 
