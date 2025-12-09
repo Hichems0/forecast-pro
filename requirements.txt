@@ -1,0 +1,26 @@
+# Enterprise Forecasting Platform - Dependencies
+# Version: 2.0.0
+# Last Updated: 2025-12-09
+
+# Core Framework
+streamlit>=1.28.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization
+plotly>=5.17.0
+
+# API Communication
+requests>=2.31.0
+
+# Excel Support
+openpyxl>=3.1.0
+
+# Date/Time Utilities
+holidays>=0.35
+python-dateutil>=2.8.2
+
+# Optional: Performance optimization
+# pyarrow>=14.0.0  # Faster DataFrame operations
