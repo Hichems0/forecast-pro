@@ -505,16 +505,16 @@ def render_footer():
     st.markdown("""
         <div class="app-footer">
             <p style="font-size: 1.1rem; font-weight: 700; color: #2c3e50; margin-bottom: 0.5rem;">
-                Luna Analytics Platform
+                Lunalogic
             </p>
             <p style="font-size: 0.9rem; color: #7f8c8d; margin-bottom: 1rem;">
-                Plateforme de prévision de demande alimentée par intelligence artificielle
+                Plateforme de prévision de demande 
             </p>
             <p style="font-size: 0.85rem; color: #95a5a6;">
                 Modèles: LSTM • Intermittent Forecaster • Sparse Spike Detection
             </p>
             <p style="font-size: 0.8rem; color: #bdc3c7; margin-top: 1rem;">
-                © 2025 Luna Analytics • Version 2.0.0
+                © 2025 Lunalogic • Version 2.0.0
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -525,7 +525,7 @@ def render_footer():
 # =========================
 
 st.set_page_config(
-    page_title="Luna Analytics • Enterprise Forecasting",
+    page_title="Lunalogic • Enterprise Forecasting",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
