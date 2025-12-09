@@ -293,7 +293,7 @@ def inject_custom_css():
         }
 
         /* Sidebar styling */
-        [data-testid="stSidebar"] {
+        section[data-testid="stSidebar"] {
             background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
         }
 
@@ -365,13 +365,13 @@ def inject_custom_css():
         }
 
         /* Metric cards */
-        [data-testid="stMetricValue"] {
+        div[data-testid="stMetricValue"] {
             font-size: 1.8rem;
             font-weight: 700;
             color: #2c3e50;
         }
 
-        [data-testid="stMetricLabel"] {
+        div[data-testid="stMetricLabel"] {
             font-weight: 600;
             color: #5a6c7d;
             text-transform: uppercase;
@@ -452,17 +452,17 @@ def inject_custom_css():
         }
 
         /* File uploader */
-        [data-testid="stFileUploader"] {
+        div[data-testid="stFileUploader"] {
             border: 2px dashed #3498db;
             border-radius: 10px;
             padding: 2rem;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            background: #f8f9fa;
             transition: all 0.3s ease;
         }
 
-        [data-testid="stFileUploader"]:hover {
+        div[data-testid="stFileUploader"]:hover {
             border-color: #2980b9;
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+            background: #e9ecef;
         }
 
         /* Subheaders */
