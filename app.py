@@ -23,30 +23,17 @@ import holidays
 # Constants
 DATA_MIN = 50  # Minimum de points de données requis
 
-# Configuration
-IS_STREAMLIT_CLOUD = os.getenv("STREAMLIT_RUNTIME_ENV") == "cloud" or not os.path.exists("/home")
+# Configuration - Simplified for Streamlit Cloud
+IS_STREAMLIT_CLOUD = os.getenv("STREAMLIT_RUNTIME_ENV") == "cloud"
 
-if not IS_STREAMLIT_CLOUD:
-    TEMP_DIR = Path(tempfile.gettempdir()) / "dataviz_cache"
-    try:
-        TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        TEMP_DIR = Path(tempfile.gettempdir())
-
-    logger = logging.getLogger("DataVizApp")
-    logger.setLevel(logging.INFO)
-    try:
-        LOG_PATH = TEMP_DIR / "dataviz_app.log"
-        if not logger.handlers:
-            fh = logging.FileHandler(LOG_PATH, encoding="utf-8")
-            fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-            fh.setFormatter(fmt)
-            logger.addHandler(fh)
-    except Exception:
-        pass
-else:
-    logger = logging.getLogger("DataVizApp")
-    logger.addHandler(logging.NullHandler())
+# Simple logger setup
+logger = logging.getLogger("DataVizApp")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 # Configuration API Modal
 try:
