@@ -495,7 +495,7 @@ def render_header():
     st.markdown("""
         <div class="app-header">
             <h1>Plateforme de Prévision Entreprise</h1>
-            <p>Système de prévision de demande alimenté par IA • Version 2.0.0</p>
+            <p>Système de prévision de demande • Version 2.0.0</p>
         </div>
     """, unsafe_allow_html=True)
 
