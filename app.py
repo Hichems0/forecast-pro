@@ -263,16 +263,17 @@ def inject_custom_css():
         <style>
         /* Main app styling */
         .main {
-            background-color: #f8f9fa;
+            background: linear-gradient(to bottom, #f8f9fa 0%, #e9ecef 100%);
         }
 
         /* Professional header */
         .app-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 2rem;
-            border-radius: 10px;
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 50%, #2980b9 100%);
+            padding: 2.5rem 2rem;
+            border-radius: 12px;
             margin-bottom: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .app-header h1 {
@@ -280,58 +281,210 @@ def inject_custom_css():
             margin: 0;
             font-size: 2.5rem;
             font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            letter-spacing: -0.5px;
         }
 
         .app-header p {
-            color: rgba(255, 255, 255, 0.9);
-            margin: 0.5rem 0 0 0;
+            color: rgba(255, 255, 255, 0.95);
+            margin: 0.75rem 0 0 0;
             font-size: 1.1rem;
+            font-weight: 400;
+        }
+
+        /* Sidebar styling */
+        [data-testid="stSidebar"] {
+            background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
         }
 
         /* Button enhancements */
         .stButton>button {
             border-radius: 8px;
             font-weight: 600;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            padding: 0.6rem 1.5rem;
         }
 
         .stButton>button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .stButton>button[kind="primary"] {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        }
+
+        .stButton>button[kind="primary"]:hover {
+            background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
         }
 
         /* Tabs styling */
         .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
+            gap: 4px;
+            background-color: #f1f3f5;
+            padding: 0.5rem;
+            border-radius: 10px;
         }
 
         .stTabs [data-baseweb="tab"] {
-            border-radius: 8px 8px 0 0;
+            border-radius: 8px;
             padding: 0.75rem 1.5rem;
             font-weight: 600;
+            background-color: transparent;
+            transition: all 0.2s ease;
+        }
+
+        .stTabs [data-baseweb="tab"]:hover {
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+
+        .stTabs [aria-selected="true"] {
+            background: white !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
         /* Progress bar */
         .stProgress > div > div > div > div {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(90deg, #3498db 0%, #2ecc71 100%);
         }
 
         /* Info boxes */
         .info-box {
-            background: #e8f4f8;
-            border-left: 4px solid #3498db;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            border-left: 4px solid #2196f3;
+            padding: 1.25rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .info-box strong {
+            color: #1565c0;
+            font-size: 1.05rem;
+        }
+
+        /* Metric cards */
+        [data-testid="stMetricValue"] {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        [data-testid="stMetricLabel"] {
+            font-weight: 600;
+            color: #5a6c7d;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        /* Dataframe styling */
+        .stDataFrame {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Input fields */
+        .stTextInput>div>div>input,
+        .stSelectbox>div>div>div,
+        .stMultiselect>div>div>div {
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.2s ease;
+        }
+
+        .stTextInput>div>div>input:focus,
+        .stSelectbox>div>div>div:focus,
+        .stMultiselect>div>div>div:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        /* Date input */
+        .stDateInput>div>div>input {
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        /* Expander */
+        .streamlit-expanderHeader {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            font-weight: 600;
+            border: 1px solid #e9ecef;
+        }
+
+        /* Success/Warning/Error messages */
+        .stSuccess, .stWarning, .stError, .stInfo {
+            border-radius: 8px;
             padding: 1rem;
-            border-radius: 4px;
             margin: 1rem 0;
         }
 
         /* Footer */
         .app-footer {
-            margin-top: 3rem;
-            padding: 2rem;
+            margin-top: 4rem;
+            padding: 2.5rem 2rem;
             text-align: center;
             color: #7f8c8d;
-            border-top: 1px solid #ecf0f1;
+            border-top: 2px solid #e9ecef;
+            background: linear-gradient(to top, #f8f9fa 0%, transparent 100%);
+        }
+
+        .app-footer p {
+            margin: 0.5rem 0;
+        }
+
+        /* Horizontal line */
+        hr {
+            margin: 2rem 0;
+            border: none;
+            border-top: 2px solid #e9ecef;
+        }
+
+        /* Radio buttons */
+        .stRadio>div {
+            background-color: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 8px;
+        }
+
+        /* File uploader */
+        [data-testid="stFileUploader"] {
+            border: 2px dashed #3498db;
+            border-radius: 10px;
+            padding: 2rem;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transition: all 0.3s ease;
+        }
+
+        [data-testid="stFileUploader"]:hover {
+            border-color: #2980b9;
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+
+        /* Subheaders */
+        .stApp h2, .stApp h3 {
+            color: #2c3e50;
+            font-weight: 700;
+        }
+
+        /* Caption text */
+        .stApp .stCaption {
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        /* Download button special styling */
+        .stDownloadButton>button {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: white;
+        }
+
+        .stDownloadButton>button:hover {
+            background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
         }
         </style>
     """, unsafe_allow_html=True)
@@ -351,8 +504,18 @@ def render_footer():
     """Render professional footer"""
     st.markdown("""
         <div class="app-footer">
-            <p><strong>Luna Analytics Platform</strong> • © 2025</p>
-            <p style="font-size: 0.85rem;">Système de prévision IA • LSTM • Intermittent • Sparse Spike Forecaster</p>
+            <p style="font-size: 1.1rem; font-weight: 700; color: #2c3e50; margin-bottom: 0.5rem;">
+                Luna Analytics Platform
+            </p>
+            <p style="font-size: 0.9rem; color: #7f8c8d; margin-bottom: 1rem;">
+                Plateforme de prévision de demande alimentée par intelligence artificielle
+            </p>
+            <p style="font-size: 0.85rem; color: #95a5a6;">
+                Modèles: LSTM • Intermittent Forecaster • Sparse Spike Detection
+            </p>
+            <p style="font-size: 0.8rem; color: #bdc3c7; margin-top: 1rem;">
+                © 2025 Luna Analytics • Version 2.0.0
+            </p>
         </div>
     """, unsafe_allow_html=True)
 
