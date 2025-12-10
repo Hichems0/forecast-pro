@@ -1220,20 +1220,20 @@ if uploaded_file is not None:
                     batch_start_date_viz = st.session_state.batch_config['start_date']
                     batch_end_date_viz = st.session_state.batch_config['end_date']
 
-                    # Récupérer les données historiques de cet article
+                    # Récupérer les données historiques de cet article avec le MÊME traitement que lors de la prévision
                     df_agg_viz_wo_bd = aggregate_quantities(df_daily, freq=freq_batch_val)
                     df_agg_viz = keep_business_day(df_agg_viz_wo_bd)
                     df_art_viz = df_agg_viz[df_agg_viz["Description article"] == selected_viz_article].copy()
                     df_art_viz = df_art_viz.sort_values("Période")
 
-                    # Trimming
+                    # Trimming (suppression des zéros au début et à la fin)
                     nonzero_mask_viz = df_art_viz["Quantité_totale"] != 0
                     if nonzero_mask_viz.any():
                         first_idx_viz = df_art_viz.index[nonzero_mask_viz][0]
                         last_idx_viz = df_art_viz.index[nonzero_mask_viz][-1]
                         df_art_viz = df_art_viz.loc[first_idx_viz:last_idx_viz]
 
-                    # Appliquer le filtre de dates historiques (comme lors de la prévision)
+                    # *** IMPORTANT *** Appliquer le MÊME filtre de dates que lors de la prévision
                     mask_viz_window = (
                         (df_art_viz["Période"] >= pd.to_datetime(batch_start_date_viz)) &
                         (df_art_viz["Période"] <= pd.to_datetime(batch_end_date_viz))
