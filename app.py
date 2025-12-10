@@ -39,7 +39,8 @@ if not logger.handlers:
 try:
     MODAL_API_URL = st.secrets["MODAL_API_URL"]
 except (KeyError, FileNotFoundError):
-    MODAL_API_URL = "https://hichemsaada0--forecast-api-predict-api.modal.run"
+    MODAL_API_URL = "https://hichemsaada0--forecast-api-v2-predict-api.modal.run"
+    #    MODAL_API_URL = "https://hichemsaada0--forecast-api-predict-api.modal.run"
 
 # =========================
 # Fonctions utilitaires
