@@ -2,8 +2,8 @@
 Enterprise Forecasting Platform - Professional Edition
 AI-Powered Demand Forecasting System with Advanced Analytics
 
-Version: 2.0.0
-Last Updated: 2025-12-09
+Version: 1.0.1
+Last Updated: 2025-12-10
 """
 from __future__ import annotations
 import io
@@ -495,7 +495,7 @@ def render_header():
     st.markdown("""
         <div class="app-header">
             <h1>Plateforme de Prévision Entreprise</h1>
-            <p>Système de prévision de demande • Version 2.0.0</p>
+            <p>Système de prévision de demande • Version 1.0.1</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -514,7 +514,7 @@ def render_footer():
                 Modèles: LSTM • Intermittent Forecaster • Sparse Spike Detection
             </p>
             <p style="font-size: 0.8rem; color: #bdc3c7; margin-top: 1rem;">
-                © 2025 Lunalogic • Version 2.0.0
+                © 2025 Lunalogic • Version 1.0.1
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -1216,6 +1216,10 @@ if uploaded_file is not None:
                 if selected_viz_article:
                     viz_result = st.session_state.batch_results[selected_viz_article]
 
+                    # Récupérer les dates de la configuration batch
+                    batch_start_date_viz = st.session_state.batch_config['start_date']
+                    batch_end_date_viz = st.session_state.batch_config['end_date']
+
                     # Récupérer les données historiques de cet article
                     df_agg_viz_wo_bd = aggregate_quantities(df_daily, freq=freq_batch_val)
                     df_agg_viz = keep_business_day(df_agg_viz_wo_bd)
@@ -1228,6 +1232,13 @@ if uploaded_file is not None:
                         first_idx_viz = df_art_viz.index[nonzero_mask_viz][0]
                         last_idx_viz = df_art_viz.index[nonzero_mask_viz][-1]
                         df_art_viz = df_art_viz.loc[first_idx_viz:last_idx_viz]
+
+                    # Appliquer le filtre de dates historiques (comme lors de la prévision)
+                    mask_viz_window = (
+                        (df_art_viz["Période"] >= pd.to_datetime(batch_start_date_viz)) &
+                        (df_art_viz["Période"] <= pd.to_datetime(batch_end_date_viz))
+                    )
+                    df_art_viz = df_art_viz.loc[mask_viz_window].copy()
 
                     series_viz = df_art_viz.set_index("Période")["Quantité_totale"]
 
