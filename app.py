@@ -1220,6 +1220,9 @@ if uploaded_file is not None:
                     batch_start_date_viz = st.session_state.batch_config['start_date']
                     batch_end_date_viz = st.session_state.batch_config['end_date']
 
+                    # Debug: afficher les dates utilisées
+                    st.caption(f"📅 Période historique utilisée: {batch_start_date_viz} → {batch_end_date_viz}")
+
                     # Récupérer les données historiques de cet article avec le MÊME traitement que lors de la prévision
                     df_agg_viz_wo_bd = aggregate_quantities(df_daily, freq=freq_batch_val)
                     df_agg_viz = keep_business_day(df_agg_viz_wo_bd)
@@ -1239,6 +1242,9 @@ if uploaded_file is not None:
                         (df_art_viz["Période"] <= pd.to_datetime(batch_end_date_viz))
                     )
                     df_art_viz = df_art_viz.loc[mask_viz_window].copy()
+
+                    # Debug: afficher le nombre de points après filtre
+                    st.caption(f"📊 Points de données après filtre: {len(df_art_viz)}")
 
                     series_viz = df_art_viz.set_index("Période")["Quantité_totale"]
 
