@@ -191,7 +191,7 @@ def keep_business_day(df_agg):
     return df_filtre
 
 
-def call_modal_api(series_data, horizon, dates=None, product_name="Unknown", timeout=900):
+def call_modal_api(series_data, horizon, dates=None, product_name="Unknown", timeout=1800):
     """
     Appelle l'API Modal pour obtenir des prévisions.
 
@@ -200,7 +200,7 @@ def call_modal_api(series_data, horizon, dates=None, product_name="Unknown", tim
         horizon: Horizon de prévision
         dates: Dates optionnelles
         product_name: Nom du produit
-        timeout: Timeout en secondes (défaut: 900s = 15min pour batch)
+        timeout: Timeout en secondes (défaut: 1800s = 30min pour batch)
     """
     payload = {
         "product_name": product_name,
@@ -550,7 +550,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Configuration système")
     st.caption(f"Points de données minimum: **{DATA_MIN}**")
-    st.caption(f"Timeout API: **900 secondes**")
+    st.caption(f"Timeout API: **1800 secondes (30 min)**")
 
 # Main content
 st.markdown("""
@@ -1121,7 +1121,7 @@ if uploaded_file is not None:
                         horizon=horizon_batch_val,
                         dates=series_data.index,
                         product_name=article,
-                        timeout=900  # 15 minutes par article
+                        timeout=1800  # 30 minutes par article
                     )
 
                     if result and result.get("success"):
