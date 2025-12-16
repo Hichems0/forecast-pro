@@ -191,6 +191,62 @@ def keep_business_day(df_agg):
     return df_filtre
 
 
+def calculate_demand_metrics(series, N=7):
+    """
+    Calcule des métriques de demande pour une série temporelle.
+
+    Args:
+        series: pd.Series avec les quantités historiques
+        N: Nombre de jours pour les métriques récentes (défaut: 7)
+
+    Returns:
+        dict avec les métriques calculées
+    """
+    if len(series) == 0:
+        return {
+            "n_obs": 0,
+            "mean_hist": np.nan,
+            "median_hist": np.nan,
+            "q10_hist": np.nan,
+            "q90_hist": np.nan,
+            "mean_last_N": np.nan,
+            "ewma_last_N": np.nan,
+        }
+
+    y = series.astype(float)
+    n_obs = len(y)
+
+    # Métriques historiques globales
+    mean_hist = y.mean()
+    median_hist = y.median()
+    q10_hist = y.quantile(0.10)
+    q90_hist = y.quantile(0.90)
+
+    # Moyenne sur les N derniers jours
+    if n_obs >= N:
+        y_last_N = y.iloc[-N:]
+    else:
+        y_last_N = y
+    mean_last_N = y_last_N.mean()
+
+    # EMA sur N jours
+    if n_obs >= 2:
+        ewma_series = y.ewm(span=N, adjust=False).mean()
+        ewma_last_N = float(ewma_series.iloc[-1])
+    else:
+        ewma_last_N = mean_hist
+
+    return {
+        "n_obs": n_obs,
+        "mean_hist": mean_hist,
+        "median_hist": median_hist,
+        "q10_hist": q10_hist,
+        "q90_hist": q90_hist,
+        "mean_last_N": mean_last_N,
+        "ewma_last_N": ewma_last_N,
+    }
+
+
 def call_modal_api(series_data, horizon, dates=None, product_name="Unknown", timeout=1800):
     """
     Appelle l'API Modal pour obtenir des prévisions.
@@ -807,6 +863,40 @@ if uploaded_file is not None:
                     st.metric("Dispersion", f"{routing_info.get('dispersion', 0):.3f}")
                 with col3:
                     st.metric("Autocorrélation", f"{routing_info.get('acf_lag1', 0):.3f}")
+
+                # Métriques de demande historique
+                st.markdown("---")
+                st.subheader("Métriques de demande historique")
+
+                # Calculer les métriques sur la série historique
+                demand_metrics = calculate_demand_metrics(series_hist, N=7)
+
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+                with col_m1:
+                    st.metric(
+                        "Moyenne historique",
+                        f"{demand_metrics['mean_hist']:.1f}",
+                        help="Moyenne de toutes les quantités historiques"
+                    )
+                with col_m2:
+                    st.metric(
+                        "Médiane historique",
+                        f"{demand_metrics['median_hist']:.1f}",
+                        help="Médiane de toutes les quantités historiques"
+                    )
+                with col_m3:
+                    st.metric(
+                        "Moyenne 7 derniers jours",
+                        f"{demand_metrics['mean_last_N']:.1f}",
+                        delta=f"{demand_metrics['mean_last_N'] - demand_metrics['mean_hist']:.1f}",
+                        help="Moyenne des 7 derniers jours vs moyenne historique"
+                    )
+                with col_m4:
+                    st.metric(
+                        "EWMA (7j)",
+                        f"{demand_metrics['ewma_last_N']:.1f}",
+                        help="Moyenne mobile exponentielle (7 jours)"
+                    )
 
                 # Extraction des résultats
                 predictions = np.array(result["predictions"])
