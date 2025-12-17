@@ -20,6 +20,16 @@ from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 import holidays
 
+# =========================
+# Configuration Streamlit (DOIT ÊTRE EN PREMIER!)
+# =========================
+st.set_page_config(
+    page_title="Lunalogic • Enterprise Forecasting",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # Constants
 DATA_MIN = 50  # Minimum de points de données requis
 
@@ -600,13 +610,6 @@ def render_footer():
 # =========================
 # Interface Streamlit
 # =========================
-
-st.set_page_config(
-    page_title="Lunalogic • Enterprise Forecasting",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Apply professional styling
 inject_custom_css()
@@ -1914,6 +1917,9 @@ if uploaded_file is not None:
             "la distribution de la demande."
         )
 
+        # Debug: vérifier que articles_sorted est accessible
+        st.caption(f"🔍 Debug: {len(articles_sorted)} articles disponibles")
+
         # Sélection des articles
         st.markdown("---")
         st.markdown("#### Sélection des articles")
@@ -1941,6 +1947,9 @@ if uploaded_file is not None:
             key="articles_monthly",
             help="Sélectionnez un ou plusieurs articles pour voir leurs métriques mensuelles"
         )
+
+        # Debug: voir ce qui est sélectionné
+        st.caption(f"🔍 Debug: Articles filtrés = {len(filtered_articles_monthly)}, Sélectionnés = {len(selected_articles_monthly)}")
 
         if not selected_articles_monthly:
             st.info("Sélectionnez au moins un article pour commencer l'analyse")
