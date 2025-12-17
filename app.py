@@ -644,6 +644,19 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
+# Lien vers l'app d'analyse mensuelle
+st.markdown("---")
+st.markdown("### 🔗 Applications connexes")
+st.link_button(
+    "📊 Analyse Mensuelle Q10/Q90 (App dédiée)",
+    "https://forecast-pro-z2aqvvkyrtzu5mtvawltgb.streamlit.app",
+    help="Ouvrir l'application d'analyse mensuelle dans un nouvel onglet",
+    type="secondary",
+    use_container_width=True
+)
+st.caption("💡 Application spécialisée pour l'analyse des quantiles mensuels avec heatmap")
+st.markdown("---")
+
 uploaded_file = st.file_uploader("Sélectionner un fichier de données", type=["csv", "xlsx"])
 
 if uploaded_file is not None:
@@ -1913,10 +1926,31 @@ if uploaded_file is not None:
     # TAB 4 : ANALYSE MENSUELLE (Q10/Q90)
     # ========================================
     with tab4:
-        st.subheader("Validation Historique (Backtesting)")
-        st.write("TAB 4 FONCTIONNE!")
-        st.success("Vous êtes dans tab4")
-        st.error("Si vous voyez ce message, tab4 marche!")
-        st.button("Bouton test")
+        st.subheader("📊 Analyse Mensuelle - Quantiles Q10/Q90")
+
+        st.info("""
+        ### 🎯 Application dédiée disponible!
+
+        L'analyse mensuelle Q10/Q90 est disponible dans une **application dédiée**
+        avec des fonctionnalités avancées:
+
+        - ✅ Sélection du mois → Stats automatiques
+        - ✅ Tableau complet des quantiles Q10/Q90
+        - ✅ Histogramme de distribution interactif
+        - ✅ **Heatmap** de patterns de demande (jour × jour de semaine)
+        - ✅ Insights automatiques (jours les plus actifs)
+        - ✅ Export Excel
+        """)
+
+        st.link_button(
+            "🚀 Ouvrir l'Analyse Mensuelle Q10/Q90",
+            "https://forecast-pro-z2aqvvkyrtzu5mtvawltgb.streamlit.app",
+            help="Ouvrir l'application d'analyse mensuelle dans un nouvel onglet",
+            type="primary",
+            use_container_width=True
+        )
+
+        st.markdown("---")
+        st.caption("💡 Cette application standalone offre une expérience optimisée pour l'analyse des quantiles mensuels")
 # Render footer
 render_footer()
