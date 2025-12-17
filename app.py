@@ -57,6 +57,22 @@ def prepare_daily_df(df, col_article="Description article", col_date="Date de li
         .astype(float)
     )
 
+    # Vérifier si la colonne "Delai de reassort" existe
+    col_delay = "Delai de reassort"
+    has_delay = col_delay in df.columns
+
+    if has_delay:
+        # Convertir délai de réassort en numérique
+        df[col_delay] = pd.to_numeric(df[col_delay], errors="coerce")
+
+        # Créer un mapping article → délai (prendre le max ou le premier)
+        delay_by_article = (
+            df[[col_article, col_delay]]
+            .dropna(subset=[col_delay])
+            .drop_duplicates(subset=[col_article])
+            .set_index(col_article)[col_delay]
+        )
+
     grouped = (
         df.groupby([col_article, col_date], as_index=False)[col_qte]
         .sum()
@@ -73,6 +89,10 @@ def prepare_daily_df(df, col_article="Description article", col_date="Date de li
         .reindex(full_index, fill_value=0)
         .reset_index()
     )
+
+    # Ajouter la colonne délai de réassort si elle existe
+    if has_delay:
+        result[col_delay] = result[col_article].map(delay_by_article)
 
     return result
 
@@ -1000,6 +1020,75 @@ if uploaded_file is not None:
                 )
 
                 st.plotly_chart(fig_pred, use_container_width=True)
+
+                # Tableau récapitulatif professionnel
+                st.markdown("---")
+                st.subheader("📊 Tableau de bord - Aide à la décision")
+
+                # Récupérer le délai de réassort si disponible
+                delay_reassort = 7  # Valeur par défaut
+                if "Delai de reassort" in df_daily.columns:
+                    delay_values = df_daily[df_daily["Description article"] == selected_article]["Delai de reassort"].dropna()
+                    if not delay_values.empty:
+                        delay_reassort = int(delay_values.iloc[0])
+
+                # Calculs pour le tableau
+                total_prevu = predictions.sum()
+                stock_securite = demand_metrics['mean_hist'] * delay_reassort * 1.5  # Facteur de sécurité 1.5
+
+                # Créer le DataFrame pour le tableau
+                summary_data = {
+                    "Indicateur": [
+                        "Total prévu sur la période",
+                        "Stock de sécurité recommandé",
+                        "Délai de réassort",
+                        "Moyenne historique (jour)",
+                        "EWMA tendance récente",
+                    ],
+                    "Valeur": [
+                        f"{total_prevu:.0f} unités",
+                        f"{stock_securite:.0f} unités",
+                        f"{delay_reassort} jours",
+                        f"{demand_metrics['mean_hist']:.1f} unités/jour",
+                        f"{demand_metrics['ewma_last_N']:.1f} unités/jour",
+                    ],
+                    "Description": [
+                        f"Somme des prévisions sur {forecast_horizon} jours ouvrés",
+                        f"Stock minimum = Moyenne × Délai × 1.5 (facteur sécurité)",
+                        "Temps d'approvisionnement fournisseur",
+                        "Demande moyenne sur l'historique complet",
+                        "Tendance récente avec poids aux données récentes",
+                    ]
+                }
+
+                summary_df = pd.DataFrame(summary_data)
+
+                # Afficher le tableau avec style
+                st.dataframe(
+                    summary_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Indicateur": st.column_config.TextColumn("Indicateur", width="medium"),
+                        "Valeur": st.column_config.TextColumn("Valeur", width="medium"),
+                        "Description": st.column_config.TextColumn("Détails", width="large"),
+                    }
+                )
+
+                # Alerte si prévision anormale
+                ratio_prev_hist = total_prevu / (demand_metrics['mean_hist'] * forecast_horizon)
+                if ratio_prev_hist > 1.5:
+                    st.warning(
+                        f"⚠️ **Alerte** : La prévision totale ({total_prevu:.0f}) est **{ratio_prev_hist:.1f}x supérieure** "
+                        f"à la moyenne historique ({demand_metrics['mean_hist'] * forecast_horizon:.0f}). "
+                        "Vérifiez la cohérence avant de valider les commandes."
+                    )
+                elif ratio_prev_hist < 0.5:
+                    st.info(
+                        f"ℹ️ **Info** : La prévision totale ({total_prevu:.0f}) est **{ratio_prev_hist:.1f}x inférieure** "
+                        f"à la moyenne historique ({demand_metrics['mean_hist'] * forecast_horizon:.0f}). "
+                        "Demande en baisse ou période creuse détectée."
+                    )
 
                 # Export Excel prévisions avec somme
                 forecast_df = pd.DataFrame({
