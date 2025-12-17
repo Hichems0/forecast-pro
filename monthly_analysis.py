@@ -2,11 +2,59 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 import io
 from datetime import datetime
 
-# Importer les fonctions Helper
-from Helper.build_df import aggregate_quantities, keep_business_day
+# =========================
+# Fonctions utilitaires
+# =========================
+
+def aggregate_quantities(df_daily, freq="D"):
+    """
+    Agrège les quantités par article sur la fréquence donnée.
+
+    freq:
+      - 'D'     : journalier
+      - 'W-MON' : hebdo lundi->dimanche
+      - 'M'     : mensuel
+    """
+    if freq == "D":
+        out = df_daily.copy()
+        out = out.rename(columns={"Date de livraison": "Période"})
+        return out
+
+    agg = (
+        df_daily
+        .groupby(
+            [
+                "Description article",
+                pd.Grouper(key="Date de livraison", freq=freq),
+            ]
+        )["Quantité_totale"]
+        .sum()
+        .reset_index()
+        .rename(columns={"Date de livraison": "Période"})
+    )
+    return agg
+
+
+def keep_business_day(df_agg):
+    """Garde uniquement les dates avec quantité > 0"""
+    # 1. Calculer la quantité totale par date
+    somme_par_date = df_agg.groupby("Période")["Quantité_totale"].sum()
+
+    # 2. Garder uniquement les dates dont la somme est > 0
+    dates_valides = somme_par_date[somme_par_date > 0].index
+
+    # 3. Filtrer le DataFrame final
+    df_filtre = df_agg[df_agg["Période"].isin(dates_valides)].copy()
+    return df_filtre
+
+
+# =========================
+# Configuration Streamlit
+# =========================
 
 st.set_page_config(
     page_title="Analyse Mensuelle Q10/Q90",
@@ -301,6 +349,105 @@ if uploaded_file is not None:
             )
 
             st.plotly_chart(fig_dist, use_container_width=True)
+
+    # Heatmap - Patterns de demande
+    st.markdown("---")
+    st.subheader("🔥 Heatmap - Patterns de demande du mois")
+
+    # Préparer les données pour le heatmap (tous les articles du mois)
+    df_heatmap = df_month_all.copy()
+    df_heatmap["Date"] = pd.to_datetime(df_heatmap["Période"])
+    df_heatmap["Jour_Semaine"] = df_heatmap["Date"].dt.day_name()
+    df_heatmap["Numéro_Semaine"] = df_heatmap["Date"].dt.isocalendar().week
+    df_heatmap["Jour"] = df_heatmap["Date"].dt.day
+
+    # Mapper les noms de jours en français
+    day_mapping = {
+        'Monday': 'Lundi',
+        'Tuesday': 'Mardi',
+        'Wednesday': 'Mercredi',
+        'Thursday': 'Jeudi',
+        'Friday': 'Vendredi',
+        'Saturday': 'Samedi',
+        'Sunday': 'Dimanche'
+    }
+    df_heatmap["Jour_Semaine_FR"] = df_heatmap["Jour_Semaine"].map(day_mapping)
+
+    # Agréger par jour du mois
+    heatmap_data = (
+        df_heatmap.groupby(["Jour", "Jour_Semaine_FR"])["Quantité_totale"]
+        .sum()
+        .reset_index()
+    )
+
+    # Créer une matrice pour le heatmap (jour du mois x jour de la semaine)
+    # Obtenir le nombre de jours dans le mois
+    days_in_month = heatmap_data["Jour"].max()
+
+    # Créer le pivot pour le heatmap
+    pivot_data = heatmap_data.pivot_table(
+        values="Quantité_totale",
+        index="Jour",
+        columns="Jour_Semaine_FR",
+        aggfunc="sum",
+        fill_value=0
+    )
+
+    # Ordonner les jours de la semaine correctement
+    jour_ordre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+    pivot_data = pivot_data.reindex(columns=[j for j in jour_ordre if j in pivot_data.columns])
+
+    # Créer le heatmap
+    fig_heatmap = go.Figure(data=go.Heatmap(
+        z=pivot_data.values,
+        x=pivot_data.columns,
+        y=pivot_data.index,
+        colorscale='Blues',
+        text=pivot_data.values,
+        texttemplate='%{text:.0f}',
+        textfont={"size": 10},
+        colorbar=dict(title="Quantité"),
+        hoverongaps=False,
+        hovertemplate='<b>%{x}</b><br>Jour %{y}<br>Quantité: %{z:.0f}<extra></extra>'
+    ))
+
+    fig_heatmap.update_layout(
+        template="plotly_white",
+        height=500,
+        xaxis_title="Jour de la semaine",
+        yaxis_title="Jour du mois",
+        title=f"Heatmap de la demande - {selected_month_str}",
+        yaxis=dict(autorange='reversed')  # Inverser pour que jour 1 soit en haut
+    )
+
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+
+    # Insights du heatmap
+    col_insight1, col_insight2 = st.columns(2)
+
+    with col_insight1:
+        # Jour de la semaine avec le plus de demande
+        demande_par_jour_semaine = df_heatmap.groupby("Jour_Semaine_FR")["Quantité_totale"].sum()
+        jour_max = demande_par_jour_semaine.idxmax()
+        qte_max = demande_par_jour_semaine.max()
+        st.metric(
+            "📅 Jour de la semaine le plus actif",
+            jour_max,
+            f"{qte_max:.0f} unités totales"
+        )
+
+    with col_insight2:
+        # Jour du mois avec le plus de demande
+        demande_par_jour_mois = df_heatmap.groupby("Jour")["Quantité_totale"].sum()
+        jour_mois_max = demande_par_jour_mois.idxmax()
+        qte_jour_max = demande_par_jour_mois.max()
+        st.metric(
+            "📆 Jour du mois le plus actif",
+            f"Jour {jour_mois_max}",
+            f"{qte_jour_max:.0f} unités"
+        )
+
+    st.caption("💡 Le heatmap aide à identifier les patterns temporels de la demande (jours de la semaine vs jours du mois)")
 
     # Export Excel
     st.markdown("---")
