@@ -677,13 +677,14 @@ if uploaded_file is not None:
     st.dataframe(ranking, use_container_width=True)
 
     # ==========
-    # ONGLETS : Article Unique vs Batch vs Validation
+    # ONGLETS : Article Unique vs Batch vs Validation vs Analyse Mensuelle
     # ==========
     st.markdown("---")
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "Prévision Article Unique",
         "Prévision Batch (Multiples Articles)",
-        "Validation Historique (Backtesting)"
+        "Validation Historique (Backtesting)",
+        "Analyse Mensuelle (Q10/Q90)"
     ])
 
     # ========================================
@@ -1900,6 +1901,268 @@ if uploaded_file is not None:
                 key="download_validation",
                 type="primary"
             )
+
+    # ========================================
+    # TAB 4 : ANALYSE MENSUELLE (Q10/Q90)
+    # ========================================
+    with tab4:
+        st.subheader("Analyse Mensuelle - Quantiles Q10/Q90")
+        st.markdown(
+            "Analysez la volatilité de la demande par mois pour détecter les périodes "
+            "à forte ou faible demande. Les quantiles Q10 et Q90 vous aident à comprendre "
+            "la distribution de la demande."
+        )
+
+        # Sélection des articles
+        st.markdown("---")
+        st.markdown("#### Sélection des articles")
+
+        search_text_monthly = st.text_input(
+            "Rechercher des articles",
+            value="",
+            placeholder="Tapez pour rechercher...",
+            key="search_monthly"
+        )
+
+        if search_text_monthly:
+            filtered_articles_monthly = [a for a in articles_sorted if search_text_monthly.lower() in a.lower()]
+        else:
+            filtered_articles_monthly = articles_sorted
+
+        if not filtered_articles_monthly:
+            st.warning("Aucun article ne correspond à votre recherche.")
+            st.stop()
+
+        selected_articles_monthly = st.multiselect(
+            "Sélectionner les articles à analyser",
+            filtered_articles_monthly,
+            default=[],
+            key="articles_monthly",
+            help="Sélectionnez un ou plusieurs articles pour voir leurs métriques mensuelles"
+        )
+
+        if not selected_articles_monthly:
+            st.info("Sélectionnez au moins un article pour commencer l'analyse")
+            st.stop()
+
+        st.caption(f"**{len(selected_articles_monthly)}** article(s) sélectionné(s)")
+
+        # Fréquence et préparation des données
+        st.markdown("---")
+        st.markdown("#### Période d'analyse")
+
+        freq_monthly_label = st.radio(
+            "Fréquence d'agrégation",
+            ("Jour", "Semaine"),
+            horizontal=True,
+            key="freq_monthly"
+        )
+
+        if freq_monthly_label == "Jour":
+            freq_monthly = "D"
+        else:
+            freq_monthly = "W-MON"
+
+        # Préparation des données avec business days
+        df_agg_monthly_wo_bd = aggregate_quantities(df_daily, freq=freq_monthly)
+        df_agg_monthly = keep_business_day(df_agg_monthly_wo_bd)
+
+        # Filtrer pour les articles sélectionnés
+        df_selected_monthly = df_agg_monthly[df_agg_monthly["Description article"].isin(selected_articles_monthly)].copy()
+
+        if df_selected_monthly.empty:
+            st.warning("Aucune donnée disponible pour les articles sélectionnés.")
+            st.stop()
+
+        # Ajouter colonne mois
+        df_selected_monthly["Mois"] = pd.to_datetime(df_selected_monthly["Période"]).dt.to_period("M")
+
+        # Sélection du mois
+        available_months = sorted(df_selected_monthly["Mois"].unique())
+        month_options = [str(m) for m in available_months]
+
+        if not month_options:
+            st.warning("Aucun mois disponible dans les données.")
+            st.stop()
+
+        selected_month_str = st.selectbox(
+            "Sélectionner un mois",
+            month_options,
+            index=len(month_options) - 1,  # Dernier mois par défaut
+            key="selected_month"
+        )
+
+        selected_month = pd.Period(selected_month_str, freq="M")
+
+        # Filtrer pour le mois sélectionné
+        df_month = df_selected_monthly[df_selected_monthly["Mois"] == selected_month].copy()
+
+        if df_month.empty:
+            st.warning(f"Aucune donnée pour le mois {selected_month_str}")
+            st.stop()
+
+        # Calculer les métriques par article pour le mois sélectionné
+        st.markdown("---")
+        st.subheader(f"📊 Métriques pour {selected_month_str}")
+
+        monthly_stats = []
+
+        for article in selected_articles_monthly:
+            df_art_month = df_month[df_month["Description article"] == article].copy()
+
+            if df_art_month.empty:
+                continue
+
+            quantities = df_art_month["Quantité_totale"]
+
+            # Calculer les métriques
+            stats = {
+                "Article": article,
+                "Moyenne": quantities.mean(),
+                "Médiane": quantities.median(),
+                "Q10 (10ème percentile)": quantities.quantile(0.10),
+                "Q90 (90ème percentile)": quantities.quantile(0.90),
+                "Écart Q90-Q10": quantities.quantile(0.90) - quantities.quantile(0.10),
+                "Min": quantities.min(),
+                "Max": quantities.max(),
+                "Total du mois": quantities.sum(),
+                "Nombre de jours": len(quantities),
+            }
+
+            monthly_stats.append(stats)
+
+        if not monthly_stats:
+            st.warning("Aucune statistique calculée pour les articles sélectionnés.")
+            st.stop()
+
+        # Créer le DataFrame des statistiques
+        monthly_stats_df = pd.DataFrame(monthly_stats)
+
+        # Afficher le tableau
+        st.dataframe(
+            monthly_stats_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Article": st.column_config.TextColumn("Article", width="large"),
+                "Moyenne": st.column_config.NumberColumn("Moyenne", format="%.1f"),
+                "Médiane": st.column_config.NumberColumn("Médiane", format="%.1f"),
+                "Q10 (10ème percentile)": st.column_config.NumberColumn("Q10", format="%.1f"),
+                "Q90 (90ème percentile)": st.column_config.NumberColumn("Q90", format="%.1f"),
+                "Écart Q90-Q10": st.column_config.NumberColumn("Écart Q90-Q10", format="%.1f"),
+                "Min": st.column_config.NumberColumn("Min", format="%.0f"),
+                "Max": st.column_config.NumberColumn("Max", format="%.0f"),
+                "Total du mois": st.column_config.NumberColumn("Total", format="%.0f"),
+                "Nombre de jours": st.column_config.NumberColumn("Jours", format="%d"),
+            }
+        )
+
+        # Interprétation
+        st.markdown("---")
+        st.subheader("💡 Interprétation des quantiles")
+
+        st.markdown("""
+        **Q10 (10ème percentile)** : Seuil de demande faible
+        - 10% des jours ont une demande inférieure à cette valeur
+        - Utile pour identifier les périodes creuses
+
+        **Q90 (90ème percentile)** : Seuil de demande élevée
+        - 90% des jours ont une demande inférieure à cette valeur
+        - 10% des jours dépassent ce seuil (pics de demande)
+        - Utile pour dimensionner les stocks de sécurité
+
+        **Écart Q90-Q10** : Indicateur de volatilité
+        - Écart faible → Demande stable et prévisible
+        - Écart élevé → Forte volatilité, risque de rupture ou surstock
+        """)
+
+        # Graphique de distribution (optionnel)
+        st.markdown("---")
+        st.subheader("📊 Visualisation de la distribution")
+
+        if len(selected_articles_monthly) > 0:
+            viz_article_monthly = st.selectbox(
+                "Sélectionner un article pour voir sa distribution",
+                selected_articles_monthly,
+                key="viz_monthly_article"
+            )
+
+            df_viz_monthly = df_month[df_month["Description article"] == viz_article_monthly].copy()
+
+            if not df_viz_monthly.empty:
+                quantities_viz = df_viz_monthly["Quantité_totale"]
+
+                # Calculer les quantiles pour le graphique
+                q10_val = quantities_viz.quantile(0.10)
+                q90_val = quantities_viz.quantile(0.90)
+                median_val = quantities_viz.median()
+
+                # Créer l'histogramme
+                fig_dist = go.Figure()
+
+                fig_dist.add_trace(
+                    go.Histogram(
+                        x=quantities_viz,
+                        nbinsx=20,
+                        name="Distribution",
+                        marker=dict(color="rgba(52, 152, 219, 0.7)"),
+                    )
+                )
+
+                # Ajouter les lignes de quantiles
+                fig_dist.add_vline(
+                    x=q10_val,
+                    line_dash="dash",
+                    line_color="orange",
+                    annotation_text=f"Q10 = {q10_val:.1f}",
+                    annotation_position="top"
+                )
+
+                fig_dist.add_vline(
+                    x=median_val,
+                    line_dash="dot",
+                    line_color="green",
+                    annotation_text=f"Médiane = {median_val:.1f}",
+                    annotation_position="top"
+                )
+
+                fig_dist.add_vline(
+                    x=q90_val,
+                    line_dash="dash",
+                    line_color="red",
+                    annotation_text=f"Q90 = {q90_val:.1f}",
+                    annotation_position="top"
+                )
+
+                fig_dist.update_layout(
+                    template="plotly_white",
+                    height=400,
+                    xaxis_title="Quantité",
+                    yaxis_title="Fréquence",
+                    title=f"Distribution de la demande - {viz_article_monthly} ({selected_month_str})",
+                    showlegend=True
+                )
+
+                st.plotly_chart(fig_dist, use_container_width=True)
+
+        # Export Excel
+        st.markdown("---")
+        st.subheader("📥 Téléchargement")
+
+        monthly_buffer = io.BytesIO()
+        with pd.ExcelWriter(monthly_buffer, engine='openpyxl') as writer:
+            monthly_stats_df.to_excel(writer, sheet_name=f"Analyse_{selected_month_str}", index=False)
+
+        monthly_buffer.seek(0)
+
+        st.download_button(
+            label=f"Télécharger l'analyse mensuelle ({len(selected_articles_monthly)} articles)",
+            data=monthly_buffer,
+            file_name=f"analyse_mensuelle_{selected_month_str}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_monthly",
+            type="primary"
+        )
 
 
 # Render footer
