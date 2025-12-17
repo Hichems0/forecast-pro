@@ -676,6 +676,9 @@ if uploaded_file is not None:
 
     st.dataframe(ranking, use_container_width=True)
 
+    # Liste des articles triés par popularité (utilisée dans tous les onglets)
+    articles_sorted = ranking["Description article"].tolist()
+
     # ==========
     # ONGLETS : Article Unique vs Batch vs Validation vs Analyse Mensuelle
     # ==========
@@ -692,8 +695,6 @@ if uploaded_file is not None:
     # ========================================
     with tab1:
         st.subheader("Analyse détaillée par article")
-
-        articles_sorted = ranking["Description article"].tolist()
 
         # Recherche
         search_text = st.text_input(
