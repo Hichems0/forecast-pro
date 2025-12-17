@@ -1937,7 +1937,7 @@ if uploaded_file is not None:
         selected_articles_monthly = st.multiselect(
             "Sélectionner les articles à analyser",
             filtered_articles_monthly,
-            default=[],
+            default=filtered_articles_monthly[:min(10, len(filtered_articles_monthly))],
             key="articles_monthly",
             help="Sélectionnez un ou plusieurs articles pour voir leurs métriques mensuelles"
         )
