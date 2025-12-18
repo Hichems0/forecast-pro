@@ -104,25 +104,30 @@ if uploaded_file is not None:
     )
 
     # ========================================
-    # SECTION 1 : TOP PRODUITS (VUE GLOBALE)
+    # SECTION 1 : TOP PRODUITS MENSUEL (TEMPOREL)
     # ========================================
     st.markdown("---")
-    st.header("📊 Top Produits - Vue Globale")
-    st.markdown("Visualisez rapidement vos meilleurs produits sur une période donnée")
+    st.header("📊 Top Produits par Mois")
+    st.markdown("Classement des meilleurs produits pour un ou plusieurs mois spécifiques")
 
-    # Sélection de la période
-    col_period1, col_period2 = st.columns([2, 1])
+    # Préparer les mois disponibles
+    df_daily["Mois"] = pd.to_datetime(df_daily["Période"]).dt.to_period("M")
+    available_months_ranking = sorted(df_daily["Mois"].unique(), reverse=True)  # Plus récent en premier
+    month_options_ranking = [str(m) for m in available_months_ranking]
 
-    with col_period1:
-        period_months = st.selectbox(
-            "📅 Sélectionner la période d'analyse",
-            options=[1, 3, 6, 9, 12],
-            index=2,  # 6 mois par défaut
-            format_func=lambda x: f"{x} mois" if x > 1 else "1 mois",
-            key="period_selection"
+    # Sélection des mois
+    col_month1, col_month2 = st.columns([2, 1])
+
+    with col_month1:
+        selected_months_ranking = st.multiselect(
+            "📅 Sélectionner le(s) mois",
+            month_options_ranking,
+            default=[month_options_ranking[0]],  # Dernier mois par défaut
+            help="Sélectionnez un ou plusieurs mois pour voir le top produits",
+            key="months_ranking"
         )
 
-    with col_period2:
+    with col_month2:
         top_n_products = st.number_input(
             "Nombre de produits",
             min_value=5,
@@ -133,16 +138,19 @@ if uploaded_file is not None:
             key="top_n_products"
         )
 
-    # Calculer la date de début en fonction de la période choisie
-    max_date = df_daily["Période"].max()
-    start_date = max_date - pd.DateOffset(months=period_months)
+    if not selected_months_ranking:
+        st.warning("⚠️ Sélectionnez au moins un mois")
+        st.stop()
 
-    # Filtrer les données pour la période
-    df_period = df_daily[df_daily["Période"] >= start_date].copy()
+    # Convertir les mois sélectionnés en Period
+    selected_periods = [pd.Period(m, freq="M") for m in selected_months_ranking]
 
-    # Calculer le top N produits pour la période
+    # Filtrer les données pour les mois sélectionnés
+    df_selected_months = df_daily[df_daily["Mois"].isin(selected_periods)].copy()
+
+    # Calculer le top N produits pour les mois sélectionnés
     top_products = (
-        df_period.groupby("Description article")["Quantité_totale"]
+        df_selected_months.groupby("Description article")["Quantité_totale"]
         .sum()
         .sort_values(ascending=False)
         .head(top_n_products)
@@ -168,12 +176,18 @@ if uploaded_file is not None:
         hovertemplate='<b>%{y}</b><br>Quantité: %{x:.0f}<extra></extra>'
     ))
 
+    # Titre du graphique
+    if len(selected_months_ranking) == 1:
+        title_months = selected_months_ranking[0]
+    else:
+        title_months = f"{len(selected_months_ranking)} mois sélectionnés"
+
     fig_top.update_layout(
         template="plotly_white",
         height=max(600, top_n_products * 20),  # Hauteur dynamique
         xaxis_title="Quantité totale vendue",
         yaxis_title="",
-        title=f"Top {top_n_products} Produits - Derniers {period_months} mois",
+        title=f"Top {top_n_products} Produits - {title_months}",
         yaxis=dict(autorange='reversed'),  # Meilleur produit en haut
         showlegend=False
     )
@@ -205,7 +219,9 @@ if uploaded_file is not None:
             delta=f"{top_1_product['Description article'][:30]}..."
         )
 
-    st.caption(f"📅 Période: {start_date.strftime('%Y-%m-%d')} à {max_date.strftime('%Y-%m-%d')}")
+    # Afficher les mois sélectionnés
+    months_display = ", ".join(selected_months_ranking)
+    st.caption(f"📅 Mois sélectionné(s): {months_display}")
 
     # Liste des articles triés par quantité totale (pour les sections suivantes)
     ranking = (
@@ -495,31 +511,35 @@ if uploaded_file is not None:
     # Obtenir le nombre de jours dans le mois
     days_in_month = heatmap_data["Jour"].max()
 
-    # Créer le pivot pour le heatmap
+    # Créer le pivot pour le heatmap (NaN au lieu de 0 pour les valeurs manquantes)
     pivot_data = heatmap_data.pivot_table(
         values="Quantité_totale",
         index="Jour",
         columns="Jour_Semaine_FR",
-        aggfunc="sum",
-        fill_value=0
+        aggfunc="sum"
     )
 
     # Ordonner les jours de la semaine correctement
     jour_ordre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
     pivot_data = pivot_data.reindex(columns=[j for j in jour_ordre if j in pivot_data.columns])
 
-    # Créer le heatmap
+    # Remplacer les zéros par NaN pour ne pas les afficher
+    pivot_data_display = pivot_data.replace(0, np.nan)
+
+    # Créer le heatmap (les NaN n'apparaissent pas)
     fig_heatmap = go.Figure(data=go.Heatmap(
-        z=pivot_data.values,
-        x=pivot_data.columns,
-        y=pivot_data.index,
+        z=pivot_data_display.values,
+        x=pivot_data_display.columns,
+        y=pivot_data_display.index,
         colorscale='Blues',
-        text=pivot_data.values,
+        text=pivot_data_display.values,
         texttemplate='%{text:.0f}',
         textfont={"size": 10},
         colorbar=dict(title="Quantité"),
         hoverongaps=False,
-        hovertemplate='<b>%{x}</b><br>Jour %{y}<br>Quantité: %{z:.0f}<extra></extra>'
+        hovertemplate='<b>%{x}</b><br>Jour %{y}<br>Quantité: %{z:.0f}<extra></extra>',
+        zmin=pivot_data_display.min().min(),  # Commencer la colorscale à la valeur min (pas 0)
+        connectgaps=False  # Ne pas connecter les gaps (cellules vides)
     ))
 
     fig_heatmap.update_layout(
