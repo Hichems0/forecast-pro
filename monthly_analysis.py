@@ -103,7 +103,111 @@ if uploaded_file is not None:
         .rename(columns={col_qte: "Quantité_totale", col_date: "Période"})
     )
 
-    # Liste des articles triés par quantité totale
+    # ========================================
+    # SECTION 1 : TOP PRODUITS (VUE GLOBALE)
+    # ========================================
+    st.markdown("---")
+    st.header("📊 Top Produits - Vue Globale")
+    st.markdown("Visualisez rapidement vos meilleurs produits sur une période donnée")
+
+    # Sélection de la période
+    col_period1, col_period2 = st.columns([2, 1])
+
+    with col_period1:
+        period_months = st.selectbox(
+            "📅 Sélectionner la période d'analyse",
+            options=[1, 3, 6, 9, 12],
+            index=2,  # 6 mois par défaut
+            format_func=lambda x: f"{x} mois" if x > 1 else "1 mois",
+            key="period_selection"
+        )
+
+    with col_period2:
+        top_n_products = st.number_input(
+            "Nombre de produits",
+            min_value=5,
+            max_value=50,
+            value=30,
+            step=5,
+            help="Nombre de produits à afficher dans le top",
+            key="top_n_products"
+        )
+
+    # Calculer la date de début en fonction de la période choisie
+    max_date = df_daily["Période"].max()
+    start_date = max_date - pd.DateOffset(months=period_months)
+
+    # Filtrer les données pour la période
+    df_period = df_daily[df_daily["Période"] >= start_date].copy()
+
+    # Calculer le top N produits pour la période
+    top_products = (
+        df_period.groupby("Description article")["Quantité_totale"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(top_n_products)
+        .reset_index()
+    )
+
+    # Créer le graphique horizontal
+    fig_top = go.Figure()
+
+    fig_top.add_trace(go.Bar(
+        x=top_products["Quantité_totale"],
+        y=top_products["Description article"],
+        orientation='h',
+        marker=dict(
+            color=top_products["Quantité_totale"],
+            colorscale='Blues',
+            showscale=True,
+            colorbar=dict(title="Quantité")
+        ),
+        text=top_products["Quantité_totale"],
+        texttemplate='%{text:.0f}',
+        textposition='outside',
+        hovertemplate='<b>%{y}</b><br>Quantité: %{x:.0f}<extra></extra>'
+    ))
+
+    fig_top.update_layout(
+        template="plotly_white",
+        height=max(600, top_n_products * 20),  # Hauteur dynamique
+        xaxis_title="Quantité totale vendue",
+        yaxis_title="",
+        title=f"Top {top_n_products} Produits - Derniers {period_months} mois",
+        yaxis=dict(autorange='reversed'),  # Meilleur produit en haut
+        showlegend=False
+    )
+
+    st.plotly_chart(fig_top, use_container_width=True)
+
+    # Métriques clés
+    col_metric1, col_metric2, col_metric3 = st.columns(3)
+
+    with col_metric1:
+        total_qty = top_products["Quantité_totale"].sum()
+        st.metric(
+            f"📦 Total Top {top_n_products}",
+            f"{total_qty:,.0f} unités"
+        )
+
+    with col_metric2:
+        avg_qty = top_products["Quantité_totale"].mean()
+        st.metric(
+            "📊 Moyenne",
+            f"{avg_qty:,.0f} unités/produit"
+        )
+
+    with col_metric3:
+        top_1_product = top_products.iloc[0]
+        st.metric(
+            "🥇 Meilleur produit",
+            f"{top_1_product['Quantité_totale']:,.0f} unités",
+            delta=f"{top_1_product['Description article'][:30]}..."
+        )
+
+    st.caption(f"📅 Période: {start_date.strftime('%Y-%m-%d')} à {max_date.strftime('%Y-%m-%d')}")
+
+    # Liste des articles triés par quantité totale (pour les sections suivantes)
     ranking = (
         df_daily.groupby("Description article")["Quantité_totale"]
         .sum()
@@ -112,7 +216,14 @@ if uploaded_file is not None:
     )
     articles_sorted = ranking["Description article"].tolist()
 
-    # ÉTAPE 1: Sélection du MOIS d'abord
+    # ========================================
+    # SECTION 2 : ANALYSE MENSUELLE DÉTAILLÉE
+    # ========================================
+    st.markdown("---")
+    st.header("📅 Analyse Mensuelle Détaillée")
+    st.markdown("Analyse approfondie des quantiles Q10/Q90 par mois")
+
+    # ÉTAPE 1: Sélection du MOIS
     st.markdown("---")
     st.markdown("### 📅 Étape 1: Sélectionner le mois à analyser")
 
