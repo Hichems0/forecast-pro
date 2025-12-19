@@ -429,15 +429,29 @@ if uploaded_file is not None:
             q90_val = quantities_viz.quantile(0.90)
             median_val = quantities_viz.median()
 
-            # Créer l'histogramme
+            # Créer l'histogramme avec bins nombreux
+            # Herve: 15-20 intervalles minimum, viser 30-40 pour granularité fine
+            n = len(quantities_viz)
+
+            # Calculer explicitement la taille des bins pour forcer le nombre
+            target_bins = max(40, n)  # Au moins 40 bins
+            data_min = quantities_viz.min()
+            data_max = quantities_viz.max()
+            data_range = data_max - data_min
+            bin_size = data_range / target_bins if data_range > 0 else 1
+
             fig_dist = go.Figure()
 
             fig_dist.add_trace(
                 go.Histogram(
                     x=quantities_viz,
-                    nbinsx=20,
+                    xbins=dict(
+                        start=data_min,
+                        end=data_max,
+                        size=bin_size
+                    ),
                     name="Distribution",
-                    marker=dict(color="rgba(52, 152, 219, 0.7)"),
+                    marker=dict(color="rgba(52, 152, 219, 0.7)", line=dict(color="black", width=1)),
                 )
             )
 
@@ -477,78 +491,101 @@ if uploaded_file is not None:
 
             st.plotly_chart(fig_dist, use_container_width=True)
 
-    # Heatmap - Patterns de demande
+    # Heatmap - Patterns de demande (calendrier)
     st.markdown("---")
-    st.subheader("🔥 Heatmap - Patterns de demande du mois")
+    st.subheader("🔥 Heatmap - Calendrier du mois")
 
     # Préparer les données pour le heatmap (tous les articles du mois)
     df_heatmap = df_month_all.copy()
     df_heatmap["Date"] = pd.to_datetime(df_heatmap["Période"])
-    df_heatmap["Jour_Semaine"] = df_heatmap["Date"].dt.day_name()
-    df_heatmap["Numéro_Semaine"] = df_heatmap["Date"].dt.isocalendar().week
+    df_heatmap["Jour_Semaine"] = df_heatmap["Date"].dt.dayofweek  # 0=Lundi, 6=Dimanche
     df_heatmap["Jour"] = df_heatmap["Date"].dt.day
 
-    # Mapper les noms de jours en français
-    day_mapping = {
-        'Monday': 'Lundi',
-        'Tuesday': 'Mardi',
-        'Wednesday': 'Mercredi',
-        'Thursday': 'Jeudi',
-        'Friday': 'Vendredi',
-        'Saturday': 'Samedi',
-        'Sunday': 'Dimanche'
-    }
-    df_heatmap["Jour_Semaine_FR"] = df_heatmap["Jour_Semaine"].map(day_mapping)
-
-    # Agréger par jour du mois
+    # Agréger par date complète
     heatmap_data = (
-        df_heatmap.groupby(["Jour", "Jour_Semaine_FR"])["Quantité_totale"]
+        df_heatmap.groupby("Date")["Quantité_totale"]
         .sum()
         .reset_index()
     )
+    heatmap_data["Jour"] = heatmap_data["Date"].dt.day
+    heatmap_data["Jour_Semaine"] = heatmap_data["Date"].dt.dayofweek
 
-    # Créer une matrice pour le heatmap (jour du mois x jour de la semaine)
-    # Obtenir le nombre de jours dans le mois
-    days_in_month = heatmap_data["Jour"].max()
+    # Filtrer pour enlever les dimanches (jour 6)
+    heatmap_data = heatmap_data[heatmap_data["Jour_Semaine"] != 6].copy()
 
-    # Créer le pivot pour le heatmap (NaN au lieu de 0 pour les valeurs manquantes)
-    pivot_data = heatmap_data.pivot_table(
-        values="Quantité_totale",
-        index="Jour",
-        columns="Jour_Semaine_FR",
-        aggfunc="sum"
-    )
+    # Créer un calendrier style matrice (semaines en lignes)
+    # Obtenir le premier jour du mois pour savoir par quelle colonne commencer
+    first_day = heatmap_data["Date"].min()
+    first_weekday = first_day.dayofweek  # 0=Lundi, 6=Dimanche
 
-    # Ordonner les jours de la semaine correctement
-    jour_ordre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
-    pivot_data = pivot_data.reindex(columns=[j for j in jour_ordre if j in pivot_data.columns])
+    # Créer une matrice pour le calendrier (max 6 semaines, 6 jours - sans dimanche)
+    calendar_matrix = np.full((6, 6), np.nan)  # 6 semaines max, 6 jours (Lun-Sam)
+    day_numbers = np.full((6, 6), "", dtype=object)  # Pour afficher le numéro du jour
 
-    # Remplacer les zéros par NaN pour ne pas les afficher
-    pivot_data_display = pivot_data.replace(0, np.nan)
+    # Remplir la matrice
+    for _, row in heatmap_data.iterrows():
+        day = row["Jour"]
+        weekday = row["Jour_Semaine"]
+        quantity = row["Quantité_totale"]
 
-    # Créer le heatmap (les NaN n'apparaissent pas)
+        # Calculer la semaine (ligne) et le jour de la semaine (colonne)
+        days_from_first = (row["Date"] - first_day).days
+        week_num = (days_from_first + first_weekday) // 7
+
+        # Ne pas traiter les dimanches (weekday 6)
+        if week_num < 6 and weekday < 6:  # Sécurité et exclusion dimanche
+            calendar_matrix[week_num, weekday] = quantity
+            day_numbers[week_num, weekday] = str(day)
+
+    # Supprimer les lignes complètement vides
+    non_empty_rows = ~np.all(np.isnan(calendar_matrix), axis=1)
+    calendar_matrix = calendar_matrix[non_empty_rows]
+    day_numbers = day_numbers[non_empty_rows]
+
+    # Labels des jours de la semaine (sans dimanche)
+    jour_labels = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+
+    # Labels des semaines
+    week_labels = [f"Semaine {i+1}" for i in range(len(calendar_matrix))]
+
+    # Créer les annotations avec le numéro du jour
+    annotations = []
+    for i in range(len(calendar_matrix)):
+        for j in range(6):  # 6 jours (Lun-Sam), pas de dimanche
+            if not np.isnan(calendar_matrix[i, j]):
+                annotations.append(
+                    dict(
+                        x=j,
+                        y=i,
+                        text=f"<b>{day_numbers[i, j]}</b><br>{int(calendar_matrix[i, j])}",
+                        showarrow=False,
+                        font=dict(size=11, color="white" if calendar_matrix[i, j] > np.nanpercentile(calendar_matrix, 70) else "black")
+                    )
+                )
+
+    # Créer le heatmap style calendrier
     fig_heatmap = go.Figure(data=go.Heatmap(
-        z=pivot_data_display.values,
-        x=pivot_data_display.columns,
-        y=pivot_data_display.index,
+        z=calendar_matrix,
+        x=jour_labels,
+        y=week_labels,
         colorscale='Blues',
-        text=pivot_data_display.values,
-        texttemplate='%{text:.0f}',
-        textfont={"size": 10},
+        showscale=True,
         colorbar=dict(title="Quantité"),
         hoverongaps=False,
-        hovertemplate='<b>%{x}</b><br>Jour %{y}<br>Quantité: %{z:.0f}<extra></extra>',
-        zmin=pivot_data_display.min().min(),  # Commencer la colorscale à la valeur min (pas 0)
-        connectgaps=False  # Ne pas connecter les gaps (cellules vides)
+        hovertemplate='<b>%{x}</b><br>%{y}<br>Quantité: %{z:.0f}<extra></extra>',
+        zmin=np.nanmin(calendar_matrix),
+        zmax=np.nanmax(calendar_matrix)
     ))
 
     fig_heatmap.update_layout(
         template="plotly_white",
-        height=500,
+        height=400,
         xaxis_title="Jour de la semaine",
-        yaxis_title="Jour du mois",
-        title=f"Heatmap de la demande - {selected_month_str}",
-        yaxis=dict(autorange='reversed')  # Inverser pour que jour 1 soit en haut
+        yaxis_title="",
+        title=f"Calendrier de la demande - {selected_month_str}",
+        annotations=annotations,
+        xaxis=dict(side='top'),  # Jours en haut comme un calendrier
+        yaxis=dict(autorange='reversed')  # Semaine 1 en haut
     )
 
     st.plotly_chart(fig_heatmap, use_container_width=True)
@@ -556,15 +593,21 @@ if uploaded_file is not None:
     # Insights du heatmap
     col_insight1, col_insight2 = st.columns(2)
 
+    # Mapper les jours pour les insights (sans dimanche)
+    jour_labels_mapping = {0: 'Lundi', 1: 'Mardi', 2: 'Mercredi', 3: 'Jeudi',
+                           4: 'Vendredi', 5: 'Samedi'}
+
     with col_insight1:
-        # Jour de la semaine avec le plus de demande
-        demande_par_jour_semaine = df_heatmap.groupby("Jour_Semaine_FR")["Quantité_totale"].sum()
-        jour_max = demande_par_jour_semaine.idxmax()
+        # Jour de la semaine avec le plus de demande (hors dimanche)
+        df_heatmap_no_sunday = df_heatmap[df_heatmap["Jour_Semaine"] != 6].copy()
+        demande_par_jour_semaine = df_heatmap_no_sunday.groupby("Jour_Semaine")["Quantité_totale"].sum()
+        jour_max_num = demande_par_jour_semaine.idxmax()
+        jour_max = jour_labels_mapping[jour_max_num]
         qte_max = demande_par_jour_semaine.max()
         st.metric(
             "📅 Jour de la semaine le plus actif",
             jour_max,
-            f"{qte_max:.0f} unités totales"
+            f"{qte_max:.0f} unités totales (Lun-Sam)"
         )
 
     with col_insight2:
@@ -578,7 +621,7 @@ if uploaded_file is not None:
             f"{qte_jour_max:.0f} unités"
         )
 
-    st.caption("💡 Le heatmap aide à identifier les patterns temporels de la demande (jours de la semaine vs jours du mois)")
+    st.caption("💡 Le heatmap aide à identifier les patterns temporels de la demande (Lundi-Samedi, dimanches exclus)")
 
     # Export Excel
     st.markdown("---")
