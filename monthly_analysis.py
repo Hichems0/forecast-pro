@@ -5,10 +5,56 @@ import plotly.graph_objects as go
 import plotly.express as px
 import io
 from datetime import datetime
+import logging
+from dataclasses import dataclass
+from typing import Optional, List, Dict
 
 # =========================
 # Fonctions utilitaires
 # =========================
+
+def prepare_daily_df(df,
+                     col_article="Description article",
+                     col_date="Date de livraison",
+                     col_qte="Quantite"):
+    """Prépare un DataFrame avec 1 ligne par (article, date) et quantités = 0 si absence."""
+    df[col_date] = pd.to_datetime(df[col_date], dayfirst=True, errors="coerce")
+
+    df[col_qte] = (
+        df[col_qte]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+        .str.replace("\u00a0", "", regex=False)
+        .astype(float)
+    )
+
+    grouped = (
+        df.groupby([col_article, col_date], as_index=False)[col_qte]
+          .sum()
+          .rename(columns={col_qte: "Quantité_totale"})
+    )
+
+    all_dates = pd.date_range(
+        start=grouped[col_date].min(),
+        end=grouped[col_date].max(),
+        freq="D",
+    )
+
+    all_articles = grouped[col_article].unique()
+
+    full_index = pd.MultiIndex.from_product(
+        [all_articles, all_dates],
+        names=[col_article, col_date],
+    )
+
+    result = (
+        grouped
+        .set_index([col_article, col_date])
+        .reindex(full_index, fill_value=0)
+        .reset_index()
+    )
+    return result
+
 
 def aggregate_quantities(df_daily, freq="D"):
     """
@@ -21,6 +67,7 @@ def aggregate_quantities(df_daily, freq="D"):
     """
     if freq == "D":
         out = df_daily.copy()
+        # Le df_daily a déjà les bonnes colonnes (Description article, Date de livraison, Quantité_totale)
         out = out.rename(columns={"Date de livraison": "Période"})
         return out
 
@@ -50,6 +97,301 @@ def keep_business_day(df_agg):
     # 3. Filtrer le DataFrame final
     df_filtre = df_agg[df_agg["Période"].isin(dates_valides)].copy()
     return df_filtre
+
+
+# =========================
+# Fonctions Market View
+# =========================
+
+def setup_logger(
+    name: str = "ProductSignals",
+    level: int = logging.INFO,
+) -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    if not logger.handlers:
+        fmt = logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        logger.addHandler(sh)
+    return logger
+
+
+def _parse_month_yyyy_mm(s: str) -> pd.Timestamp:
+    return pd.to_datetime(f"{s}-01", errors="coerce")
+
+
+def _month_start(yyyy_mm: str) -> pd.Timestamp:
+    return pd.Period(yyyy_mm, freq="M").to_timestamp(how="start")
+
+
+def _month_end(yyyy_mm: str) -> pd.Timestamp:
+    return (pd.Period(yyyy_mm, freq="M") + 1).to_timestamp(how="start")
+
+
+def _safe_to_datetime(s: pd.Series) -> pd.Series:
+    return pd.to_datetime(s, errors="coerce")
+
+
+def _linear_reg_slope(x: np.ndarray, y: np.ndarray) -> float:
+    if len(x) < 2:
+        return np.nan
+    x = x.astype(float)
+    y = y.astype(float)
+    x_mean = x.mean()
+    y_mean = y.mean()
+    denom = np.sum((x - x_mean) ** 2)
+    if denom == 0:
+        return np.nan
+    return float(np.sum((x - x_mean) * (y - y_mean)) / denom)
+
+
+def _pct_slope_per_day(slope: float, baseline: float) -> float:
+    if baseline is None or np.isnan(baseline) or baseline == 0:
+        return np.nan
+    return float(slope / baseline)
+
+
+def _sparkline_fig_sober(
+    ts: pd.Series,
+    height: int = 70,
+    line_width: float = 1.2,
+) -> go.Figure:
+    ts = ts.dropna()
+    fig = go.Figure()
+
+    if ts.empty:
+        fig.update_layout(
+            template="plotly_white",
+            height=height,
+            margin=dict(l=0, r=0, t=0, b=0),
+            xaxis=dict(visible=False, fixedrange=True),
+            yaxis=dict(visible=False, fixedrange=True),
+        )
+        return fig
+
+    fig.add_trace(
+        go.Scatter(
+            x=ts.index,
+            y=ts.values,
+            mode="lines",
+            line=dict(width=line_width, color="black"),
+            line_shape="linear",
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=[ts.index[-1]],
+            y=[ts.values[-1]],
+            mode="markers",
+            marker=dict(size=5, color="black"),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+    fig.update_layout(
+        template="plotly_white",
+        height=height,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False, fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True),
+    )
+    return fig
+
+
+@dataclass
+class ProductSignalsConfig:
+    col_article: str = "Description article"
+    col_date: str = "Période"
+    col_qty: str = "Quantité_totale"
+    top_universe_n: int = 50
+    min_points: int = 5
+
+
+def compute_product_signals_calendar_months(
+    df_daily: pd.DataFrame,
+    lookback_start: str,
+    lookback_end: str,
+    cfg: Optional[ProductSignalsConfig] = None,
+    logger: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    if cfg is None:
+        cfg = ProductSignalsConfig()
+    if logger is None:
+        logger = setup_logger("ProductSignals")
+
+    required = [cfg.col_article, cfg.col_date, cfg.col_qty]
+    missing = [c for c in required if c not in df_daily.columns]
+    if missing:
+        raise ValueError(f"Colonnes manquantes: {missing}")
+
+    df = df_daily.copy()
+    df[cfg.col_date] = _safe_to_datetime(df[cfg.col_date])
+    df = df.dropna(subset=[cfg.col_article, cfg.col_date])
+    df[cfg.col_qty] = pd.to_numeric(df[cfg.col_qty], errors="coerce").fillna(0.0)
+
+    start_dt = _month_start(lookback_start)
+    end_excl = _month_end(lookback_end)
+
+    df_before = df[df[cfg.col_date] < start_dt]
+    df_lb = df[(df[cfg.col_date] >= start_dt) & (df[cfg.col_date] < end_excl)]
+
+    if df_lb.empty:
+        raise ValueError("Fenêtre lookback vide")
+
+    universe = (
+        df_lb.groupby(cfg.col_article, as_index=False)[cfg.col_qty]
+            .sum()
+            .sort_values(cfg.col_qty, ascending=False)
+            .head(cfg.top_universe_n)[cfg.col_article]
+            .tolist()
+    )
+
+    lb_groups = {k: g for k, g in df_lb[df_lb[cfg.col_article].isin(universe)].groupby(cfg.col_article)}
+    before_groups = {k: g for k, g in df_before[df_before[cfg.col_article].isin(universe)].groupby(cfg.col_article)}
+
+    out_rows: List[Dict] = []
+    n = len(universe)
+
+    for i, article in enumerate(universe, start=1):
+        g_lb = lb_groups.get(article)
+        if g_lb is None or g_lb.empty:
+            continue
+
+        g_lb = g_lb.sort_values(cfg.col_date)
+        y = g_lb[cfg.col_qty].astype(float).values
+        dates = g_lb[cfg.col_date].values
+        n_pts = len(y)
+
+        vol_level = float(np.std(y, ddof=1)) if n_pts >= 2 else np.nan
+
+        if n_pts >= 3:
+            prev = y[:-1].copy()
+            prev[prev == 0] = 1.0
+            rets = (y[1:] - y[:-1]) / prev
+            vol_ret = float(np.std(rets, ddof=1)) if len(rets) >= 2 else np.nan
+        else:
+            vol_ret = np.nan
+
+        if n_pts >= 2:
+            t0 = pd.Timestamp(g_lb[cfg.col_date].iloc[0])
+            t = (pd.to_datetime(g_lb[cfg.col_date]) - t0).dt.days.values.astype(float)
+            slope_abs = _linear_reg_slope(t, y)
+            baseline = float(np.mean(y)) if np.mean(y) != 0 else float(np.median(y))
+            slope_pct = _pct_slope_per_day(slope_abs, baseline)
+        else:
+            slope_abs = np.nan
+            slope_pct = np.nan
+
+        max_lb = float(np.max(y)) if n_pts > 0 else np.nan
+        min_lb = float(np.min(y)) if n_pts > 0 else np.nan
+
+        g_b = before_groups.get(article)
+        if g_b is not None and not g_b.empty:
+            y_b = g_b[cfg.col_qty].astype(float).values
+            max_b = float(np.max(y_b)) if len(y_b) > 0 else np.nan
+            min_b = float(np.min(y_b)) if len(y_b) > 0 else np.nan
+        else:
+            max_b = np.nan
+            min_b = np.nan
+
+        new_high = bool(np.isfinite(max_lb) and np.isfinite(max_b) and (max_lb > max_b))
+        new_low = bool(np.isfinite(min_lb) and np.isfinite(min_b) and (min_lb < min_b))
+
+        out_rows.append({
+            "article": article,
+            "lookback_start": lookback_start,
+            "lookback_end": lookback_end,
+            "n_points_lookback": n_pts,
+            "sum_qty_lookback": float(np.sum(y)),
+            "mean_qty_lookback": float(np.mean(y)) if n_pts > 0 else np.nan,
+            "slope_abs_per_day": slope_abs,
+            "slope_pct_per_day": slope_pct,
+            "volatility_level_std": vol_level,
+            "volatility_return_std": vol_ret,
+            "max_lookback": max_lb,
+            "max_before": max_b,
+            "min_lookback": min_lb,
+            "min_before": min_b,
+            "new_high": new_high,
+            "new_low": new_low,
+        })
+
+    res = pd.DataFrame(out_rows)
+    res["gainer_score"] = res["slope_pct_per_day"].replace([np.inf, -np.inf], np.nan)
+    if res["gainer_score"].isna().all():
+        res["gainer_score"] = res["slope_abs_per_day"]
+
+    return res.sort_values("sum_qty_lookback", ascending=False).reset_index(drop=True)
+
+
+def build_dashboard_table_solution_A(df_sig: pd.DataFrame, top_k: int = 3) -> pd.DataFrame:
+    df = df_sig.copy()
+
+    df["gainer_score"] = df["gainer_score"].replace([np.inf, -np.inf], np.nan)
+    gainers = df.sort_values("gainer_score", ascending=False).head(top_k)
+    losers = df.sort_values("gainer_score", ascending=True).head(top_k)
+
+    vol = df.copy()
+    vol["volatility_level_std"] = pd.to_numeric(vol["volatility_level_std"], errors="coerce")
+    vol["volatility_return_std"] = pd.to_numeric(vol["volatility_return_std"], errors="coerce")
+
+    mx_lvl = float(vol["volatility_level_std"].max()) if vol["volatility_level_std"].notna().any() else 0.0
+    mx_ret = float(vol["volatility_return_std"].max()) if vol["volatility_return_std"].notna().any() else 0.0
+
+    vol["vol_level_norm"] = (vol["volatility_level_std"] / mx_lvl) if mx_lvl > 0 else 0.0
+    vol["vol_ret_norm"] = (vol["volatility_return_std"] / mx_ret) if mx_ret > 0 else 0.0
+    vol["vol_score"] = vol[["vol_level_norm", "vol_ret_norm"]].max(axis=1).fillna(0.0)
+    most_vol = vol.sort_values("vol_score", ascending=False).head(top_k)
+
+    nh = df[df["new_high"] == True].copy()
+    nh["delta_high"] = nh["max_lookback"] - nh["max_before"]
+    nh = nh.sort_values("delta_high", ascending=False).head(top_k)
+
+    nl = df[df["new_low"] == True].copy()
+    nl["delta_low"] = nl["min_before"] - nl["min_lookback"]
+    nl = nl.sort_values("delta_low", ascending=False).head(top_k)
+
+    def _pack(block_name: str, sub: pd.DataFrame, cols: list) -> pd.DataFrame:
+        out = sub[[c for c in cols if c in sub.columns]].copy()
+        out.insert(0, "block", block_name)
+        return out
+
+    cols_common = [
+        "article",
+        "sum_qty_lookback",
+        "gainer_score",
+        "volatility_level_std",
+        "volatility_return_std",
+        "new_high",
+        "new_low",
+    ]
+    cols_vol = cols_common + ["vol_score"]
+
+    table = pd.concat(
+        [
+            _pack("Top Gainers (slope)", gainers, cols_common),
+            _pack("Top Losers (slope)", losers, cols_common),
+            _pack("Most Volatile", most_vol, cols_vol),
+            _pack("New High", nh, cols_common + ["delta_high", "max_lookback", "max_before"]),
+            _pack("New Low", nl, cols_common + ["delta_low", "min_lookback", "min_before"]),
+        ],
+        axis=0,
+        ignore_index=True,
+    )
+
+    return table
+
+
+# Logger global
+logger = setup_logger("MonthlyAnalysis")
 
 
 # =========================
@@ -85,23 +427,8 @@ if uploaded_file is not None:
     col_date = "Date de livraison"
     col_qte = "Quantite"
 
-    # Convertir les dates et quantités
-    df_raw[col_date] = pd.to_datetime(df_raw[col_date], dayfirst=True, errors="coerce")
-    df_raw[col_qte] = (
-        df_raw[col_qte]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-        .str.replace("\u00a0", "", regex=False)
-        .astype(float)
-    )
-
-    # Grouper par article et date
-    df_daily = (
-        df_raw.groupby([col_article, col_date])[col_qte]
-        .sum()
-        .reset_index()
-        .rename(columns={col_qte: "Quantité_totale", col_date: "Période"})
-    )
+    # Créer un DataFrame complet avec toutes les dates pour tous les articles (rempli avec 0)
+    df_daily = prepare_daily_df(df_raw, col_article=col_article, col_date=col_date, col_qte=col_qte)
 
     # ========================================
     # SECTION 1 : TOP PRODUITS MENSUEL (TEMPOREL)
@@ -110,9 +437,10 @@ if uploaded_file is not None:
     st.header("📊 Top Produits par Mois")
     st.markdown("Classement des meilleurs produits pour un ou plusieurs mois spécifiques")
 
-    # Préparer les mois disponibles
-    df_daily["Mois"] = pd.to_datetime(df_daily["Période"]).dt.to_period("M")
-    available_months_ranking = sorted(df_daily["Mois"].unique(), reverse=True)  # Plus récent en premier
+    # Préparer les mois disponibles (df_daily a "Date de livraison", pas encore "Période")
+    df_daily_temp = df_daily.copy()
+    df_daily_temp["Mois"] = pd.to_datetime(df_daily_temp["Date de livraison"]).dt.to_period("M")
+    available_months_ranking = sorted(df_daily_temp["Mois"].unique(), reverse=True)  # Plus récent en premier
     month_options_ranking = [str(m) for m in available_months_ranking]
 
     # Sélection des mois
@@ -146,7 +474,7 @@ if uploaded_file is not None:
     selected_periods = [pd.Period(m, freq="M") for m in selected_months_ranking]
 
     # Filtrer les données pour les mois sélectionnés
-    df_selected_months = df_daily[df_daily["Mois"].isin(selected_periods)].copy()
+    df_selected_months = df_daily_temp[df_daily_temp["Mois"].isin(selected_periods)].copy()
 
     # Calculer le top N produits pour les mois sélectionnés
     top_products = (
@@ -491,46 +819,68 @@ if uploaded_file is not None:
 
             st.plotly_chart(fig_dist, use_container_width=True)
 
-    # Heatmap - Patterns de demande (calendrier)
+    # Heatmap - Patterns de demande (calendrier multi-mois)
     st.markdown("---")
-    st.subheader("🔥 Heatmap - Calendrier du mois")
+    st.subheader("🔥 Heatmap - Calendrier agrégé")
 
-    # Préparer les données pour le heatmap (tous les articles du mois)
-    df_heatmap = df_month_all.copy()
-    df_heatmap["Date"] = pd.to_datetime(df_heatmap["Période"])
-    df_heatmap["Jour_Semaine"] = df_heatmap["Date"].dt.dayofweek  # 0=Lundi, 6=Dimanche
-    df_heatmap["Jour"] = df_heatmap["Date"].dt.day
+    # Sélection des mois pour le heatmap
+    st.markdown("### Sélectionner le(s) mois à visualiser")
 
-    # Agréger par date complète
+    available_months_heatmap = sorted(df_agg["Mois"].unique(), reverse=True)
+    month_options_heatmap = [str(m) for m in available_months_heatmap]
+
+    selected_months_heatmap = st.multiselect(
+        "📅 Mois à inclure dans le calendrier",
+        month_options_heatmap,
+        default=[month_options_heatmap[-1]],  # Dernier mois par défaut
+        help="Sélectionnez un ou plusieurs mois. Les quantités des mêmes jours seront additionnées.",
+        key="months_heatmap"
+    )
+
+    if not selected_months_heatmap:
+        st.warning("⚠️ Sélectionnez au moins un mois pour voir le heatmap")
+        st.stop()
+
+    # Convertir les mois sélectionnés
+    selected_periods_heatmap = [pd.Period(m, freq="M") for m in selected_months_heatmap]
+
+    # Filtrer les données pour les mois sélectionnés
+    df_heatmap_multi = df_agg[df_agg["Mois"].isin(selected_periods_heatmap)].copy()
+    df_heatmap_multi["Date"] = pd.to_datetime(df_heatmap_multi["Période"])
+    df_heatmap_multi["Jour_Semaine"] = df_heatmap_multi["Date"].dt.dayofweek  # 0=Lundi, 6=Dimanche
+    df_heatmap_multi["Jour"] = df_heatmap_multi["Date"].dt.day
+
+    # Agréger par JOUR DU MOIS (pas par date absolue) pour additionner les mêmes jours
+    # Jour 1 de tous les mois, Jour 2 de tous les mois, etc.
     heatmap_data = (
-        df_heatmap.groupby("Date")["Quantité_totale"]
-        .sum()
+        df_heatmap_multi.groupby(["Jour", "Jour_Semaine"])["Quantité_totale"]
+        .sum()  # Somme des quantités pour chaque jour du mois
         .reset_index()
     )
-    heatmap_data["Jour"] = heatmap_data["Date"].dt.day
-    heatmap_data["Jour_Semaine"] = heatmap_data["Date"].dt.dayofweek
 
     # Filtrer pour enlever les dimanches (jour 6)
     heatmap_data = heatmap_data[heatmap_data["Jour_Semaine"] != 6].copy()
 
     # Créer un calendrier style matrice (semaines en lignes)
-    # Obtenir le premier jour du mois pour savoir par quelle colonne commencer
-    first_day = heatmap_data["Date"].min()
-    first_weekday = first_day.dayofweek  # 0=Lundi, 6=Dimanche
+    # Utiliser le premier jour du premier mois sélectionné comme référence
+    first_month_period = selected_periods_heatmap[0]
+    first_month_date = first_month_period.to_timestamp()
+    first_weekday = first_month_date.dayofweek  # 0=Lundi, 6=Dimanche
 
     # Créer une matrice pour le calendrier (max 6 semaines, 6 jours - sans dimanche)
     calendar_matrix = np.full((6, 6), np.nan)  # 6 semaines max, 6 jours (Lun-Sam)
     day_numbers = np.full((6, 6), "", dtype=object)  # Pour afficher le numéro du jour
 
-    # Remplir la matrice
+    # Remplir la matrice par jour du mois
     for _, row in heatmap_data.iterrows():
-        day = row["Jour"]
-        weekday = row["Jour_Semaine"]
+        day = int(row["Jour"])
+        weekday = int(row["Jour_Semaine"])
         quantity = row["Quantité_totale"]
 
-        # Calculer la semaine (ligne) et le jour de la semaine (colonne)
-        days_from_first = (row["Date"] - first_day).days
-        week_num = (days_from_first + first_weekday) // 7
+        # Calculer la position dans le calendrier basé sur le jour du mois
+        # On utilise le premier jour du mois de référence pour calculer la semaine
+        day_offset = day - 1  # jour 1 = offset 0
+        week_num = int((day_offset + first_weekday) // 7)
 
         # Ne pas traiter les dimanches (weekday 6)
         if week_num < 6 and weekday < 6:  # Sécurité et exclusion dimanche
@@ -577,12 +927,18 @@ if uploaded_file is not None:
         zmax=np.nanmax(calendar_matrix)
     ))
 
+    # Titre dynamique selon le nombre de mois
+    if len(selected_months_heatmap) == 1:
+        title_heatmap = f"Calendrier de la demande - {selected_months_heatmap[0]}"
+    else:
+        title_heatmap = f"Calendrier agrégé - {len(selected_months_heatmap)} mois"
+
     fig_heatmap.update_layout(
         template="plotly_white",
         height=400,
         xaxis_title="Jour de la semaine",
         yaxis_title="",
-        title=f"Calendrier de la demande - {selected_month_str}",
+        title=title_heatmap,
         annotations=annotations,
         xaxis=dict(side='top'),  # Jours en haut comme un calendrier
         yaxis=dict(autorange='reversed')  # Semaine 1 en haut
@@ -599,7 +955,7 @@ if uploaded_file is not None:
 
     with col_insight1:
         # Jour de la semaine avec le plus de demande (hors dimanche)
-        df_heatmap_no_sunday = df_heatmap[df_heatmap["Jour_Semaine"] != 6].copy()
+        df_heatmap_no_sunday = df_heatmap_multi[df_heatmap_multi["Jour_Semaine"] != 6].copy()
         demande_par_jour_semaine = df_heatmap_no_sunday.groupby("Jour_Semaine")["Quantité_totale"].sum()
         jour_max_num = demande_par_jour_semaine.idxmax()
         jour_max = jour_labels_mapping[jour_max_num]
@@ -611,17 +967,24 @@ if uploaded_file is not None:
         )
 
     with col_insight2:
-        # Jour du mois avec le plus de demande
-        demande_par_jour_mois = df_heatmap.groupby("Jour")["Quantité_totale"].sum()
+        # Jour du mois avec le plus de demande (agrégé)
+        demande_par_jour_mois = df_heatmap_multi.groupby("Jour")["Quantité_totale"].sum()
         jour_mois_max = demande_par_jour_mois.idxmax()
         qte_jour_max = demande_par_jour_mois.max()
         st.metric(
-            "📆 Jour du mois le plus actif",
+            "📆 Jour du mois le plus actif (agrégé)",
             f"Jour {jour_mois_max}",
             f"{qte_jour_max:.0f} unités"
         )
 
-    st.caption("💡 Le heatmap aide à identifier les patterns temporels de la demande (Lundi-Samedi, dimanches exclus)")
+    # Caption dynamique
+    months_display_heatmap = ", ".join(selected_months_heatmap)
+    if len(selected_months_heatmap) == 1:
+        caption_text = f"💡 Calendrier pour {months_display_heatmap} (Lundi-Samedi, dimanches exclus)"
+    else:
+        caption_text = f"💡 Somme des quantités pour les mêmes jours sur {len(selected_months_heatmap)} mois: {months_display_heatmap}"
+
+    st.caption(caption_text)
 
     # Export Excel
     st.markdown("---")
@@ -644,6 +1007,164 @@ if uploaded_file is not None:
 
     st.markdown("---")
     st.info("💡 Cette analyse vous aide à comprendre la volatilité de la demande et à optimiser vos stocks.")
+
+    # ============================================================
+    # MARKET VIEW
+    # ============================================================
+    st.markdown("---")
+    st.subheader("📊 Market View – Top 50 (Gainers / Losers / Volatility / New High-Low)")
+
+    today_period = pd.Timestamp.today().to_period("M")
+    default_end = str(today_period)
+    default_start = str((today_period - 2))
+
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c1:
+        lookback_start = st.text_input("Début (YYYY-MM)", value=default_start, key="mv_start")
+    with c2:
+        lookback_end = st.text_input("Fin (YYYY-MM)", value=default_end, key="mv_end")
+    with c3:
+        top_k = st.number_input("Top K (par bloc)", min_value=1, max_value=10, value=3, key="mv_topk")
+
+    run_signals = st.button("✨ Calculer Market View")
+
+    if run_signals:
+        try:
+            cfg_signals = ProductSignalsConfig(
+                col_article="Description article",
+                col_date="Période",
+                col_qty="Quantité_totale",
+                top_universe_n=50,
+                min_points=5,
+            )
+
+            df_signals = compute_product_signals_calendar_months(
+                df_daily=df_agg,
+                lookback_start=lookback_start,
+                lookback_end=lookback_end,
+                cfg=cfg_signals,
+                logger=logger,
+            )
+
+            dash_tbl = build_dashboard_table_solution_A(df_signals, top_k=int(top_k))
+
+            view = dash_tbl.copy()
+
+            icon_map = {
+                "Top Gainers (slope)": "🟢⬆️",
+                "Top Losers (slope)": "🔴⬇️",
+                "Most Volatile": "🟠🌪️",
+                "New High": "🟣🚀",
+                "New Low": "🟣🧊",
+            }
+            view["icon"] = view["block"].map(icon_map).fillna("")
+
+            def _main_value_row(r):
+                b = r["block"]
+                if "Gainers" in b or "Losers" in b:
+                    v = r.get("gainer_score", np.nan)
+                    return f"{v * 100:.2f}%/jour" if pd.notna(v) else ""
+                if b == "Most Volatile":
+                    v1 = r.get("volatility_level_std", np.nan)
+                    v2 = r.get("volatility_return_std", np.nan)
+                    vs = r.get("vol_score", np.nan)
+                    s1 = f"{v1:.2f}" if pd.notna(v1) else "NA"
+                    s2 = f"{v2:.2f}" if pd.notna(v2) else "NA"
+                    ss = f"{vs:.2f}" if pd.notna(vs) else "NA"
+                    return f"σlvl={s1} | σret={s2} | score={ss}"
+                if b == "New High":
+                    v = r.get("delta_high", np.nan)
+                    return f"+{v:.0f}" if pd.notna(v) else ""
+                if b == "New Low":
+                    v = r.get("delta_low", np.nan)
+                    return f"+{v:.0f}" if pd.notna(v) else ""
+                return ""
+
+            view["value_main"] = view.apply(_main_value_row, axis=1)
+
+            show_cols = ["block", "icon", "article", "sum_qty_lookback", "value_main"]
+            show_cols = [c for c in show_cols if c in view.columns]
+
+            st.caption("Tableau unique – Top K par bloc")
+            st.dataframe(view[show_cols], use_container_width=True, hide_index=True)
+
+            # ============================================================
+            # ✅ RENDU SPARKLINES + 1 POINT / JOUR
+            # ============================================================
+            st.caption("Mini-graphes historiques (sparklines) – 1 point par jour sur la fenêtre lookback")
+
+            lb_start = _parse_month_yyyy_mm(lookback_start)
+            lb_end = _parse_month_yyyy_mm(lookback_end)
+
+            if pd.isna(lb_start) or pd.isna(lb_end):
+                st.warning("Lookback invalide. Utilise le format YYYY-MM (ex: 2025-10).")
+            else:
+                # fin de mois incluse
+                lb_end = (lb_end + pd.offsets.MonthEnd(0)).normalize()
+
+                all_days = pd.date_range(lb_start, lb_end, freq="D")
+
+                df_lb = df_agg.copy()
+                df_lb["Période"] = pd.to_datetime(df_lb["Période"], errors="coerce")
+                df_lb = df_lb[(df_lb["Période"] >= lb_start) & (df_lb["Période"] <= lb_end)].copy()
+
+                # Map article -> série daily complète (1 point par jour)
+                series_map: dict[str, pd.Series] = {}
+                for art, subdf in df_lb.groupby("Description article"):
+                    s = (
+                        subdf.sort_values("Période")
+                        .set_index("Période")["Quantité_totale"]
+                        .reindex(all_days, fill_value=0.0)
+                    )
+                    series_map[art] = s
+
+                # Affichage par bloc, puis par ligne
+                for blk in view["block"].unique():
+                    st.markdown(f"**{blk}**")
+                    sub = view[view["block"] == blk].copy().reset_index(drop=True)
+
+                    for irow in range(len(sub)):
+                        r = sub.loc[irow]
+                        art = r["article"]
+                        s_hist = series_map.get(art, pd.Series(index=all_days, data=np.zeros(len(all_days))))
+
+                        spark = _sparkline_fig_sober(
+                            s_hist,
+                            height=72,
+                            line_width=1.6,
+                        )
+
+                        cA, cB, cC = st.columns([7, 6, 7])
+                        with cA:
+                            st.write(f"{int(irow + 1)}. {r.get('icon','')} {art}")
+                        with cB:
+                            st.write(r.get("value_main", ""))
+                        with cC:
+                            st.plotly_chart(
+                                spark,
+                                use_container_width=True,
+                                config={"displayModeBar": False, "staticPlot": True},
+                            )
+
+            # Exports
+            st.download_button(
+                "📥 Télécharger signaux complets (CSV)",
+                data=df_signals.to_csv(index=False).encode("utf-8"),
+                file_name=f"signals_{lookback_start}_to_{lookback_end}.csv",
+                mime="text/csv",
+                key="download_signals"
+            )
+            st.download_button(
+                "📥 Télécharger tableau Market View (CSV)",
+                data=dash_tbl.to_csv(index=False).encode("utf-8"),
+                file_name=f"market_view_{lookback_start}_to_{lookback_end}.csv",
+                mime="text/csv",
+                key="download_market_view"
+            )
+
+        except Exception as e:
+            logger.exception("Erreur Market View: %s", str(e))
+            st.error(f"⚠️ Erreur Market View: {str(e)}")
 
 else:
     st.info("👆 Commencez par charger un fichier CSV ou Excel contenant les colonnes: Description article, Date de livraison, Quantite")
